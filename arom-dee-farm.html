@@ -833,23 +833,22 @@ async function cloudPushAllLocal(){
 async function ensureFarmForUser(user){
   const {data:existing,error}=await sb.from("farms").select("id").eq("owner_id",user.id).maybeSingle();
   if(error){console.warn("ตรวจสอบฟาร์มไม่สำเร็จ",error);return null;}
-  if(existing)return existing.id;
+  if(existing)return {id:existing.id,created:false};
   const {data:created,error:cerr}=await sb.from("farms").insert({
     owner_id:user.id, owner_email:user.email, name:settings.name||"อารมณ์ดี ฟาร์ม"
   }).select("id").single();
   if(cerr){console.warn("สร้างฟาร์มไม่สำเร็จ",cerr);return null;}
-  return created.id;
+  return {id:created.id,created:true};
 }
-async function afterLogin(session,{isNewFarm}={}){
+async function afterLogin(session){
   cloudSession=session;
-  const id=await ensureFarmForUser(session.user);
-  if(!id){toast("เชื่อมต่อฐานข้อมูลไม่สำเร็จ ลองใหม่อีกครั้ง");return;}
-  const brandNewFarm=!!isNewFarm;
-  farmId=id;
+  const farmInfo=await ensureFarmForUser(session.user);
+  if(!farmInfo){toast("เชื่อมต่อฐานข้อมูลไม่สำเร็จ ลองใหม่อีกครั้ง");return;}
+  farmId=farmInfo.id;
   setCloudBadge("on");
   closeModals();
   const hasLocalData=sires.length>0||bookings.length>0;
-  if(brandNewFarm&&hasLocalData){
+  if(farmInfo.created&&hasLocalData){
     if(confirm("พบข้อมูลเดิมในเครื่องนี้ ("+sires.length+" พ่อพันธุ์, "+bookings.length+" คิว) ต้องการย้ายขึ้นคลาวด์เลยไหม?")){
       toast("กำลังย้ายข้อมูลขึ้นคลาวด์...");
       await cloudPushAllLocal();
@@ -868,7 +867,7 @@ document.getElementById("btnAuthSignin").addEventListener("click",async()=>{
   if(!email||!password){showMsg("authMsg","err","",["กรอกอีเมลและรหัสผ่านให้ครบ"]);return;}
   const {data,error}=await sb.auth.signInWithPassword({email,password});
   if(error){showMsg("authMsg","err","",["เข้าสู่ระบบไม่สำเร็จ: "+error.message]);return;}
-  await afterLogin(data.session,{isNewFarm:false});
+  await afterLogin(data.session);
 });
 document.getElementById("btnAuthSignup").addEventListener("click",async()=>{
   if(!sb){showMsg("authMsg","err","",["ยังไม่ได้ตั้งค่าการเชื่อมต่อคลาวด์"]);return;}
@@ -882,7 +881,7 @@ document.getElementById("btnAuthSignup").addEventListener("click",async()=>{
     showMsg("authMsg","warn","",["สมัครสำเร็จ! กรุณาเช็คอีเมลเพื่อยืนยันตัวตน แล้วกลับมากด \"เข้าสู่ระบบ\" อีกครั้ง"]);
     return;
   }
-  await afterLogin(data.session,{isNewFarm:true});
+  await afterLogin(data.session);
 });
 
 /* ================= Date helpers (ใช้วันที่แบบ UTC เที่ยงคืน ไม่คลาดเคลื่อนตามเขตเวลา) ================= */
