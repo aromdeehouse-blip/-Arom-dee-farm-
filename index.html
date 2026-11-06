@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>เข้าสู่ระบบฟาร์ม — ระบบจองคิวฝากผสมพันธุ์ไก่ชน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Trirong:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --paper:#FBF7EC;
+    --paper-2:#F3EDDA;
+    --card:#FFFFFF;
+    --ink:#23271F;
+    --ink-soft:#6A6C5C;
+    --pine:#1E4632;
+    --pine-2:#163524;
+    --brass:#C6942B;
+    --brass-soft:#EED9A0;
+    --comb:#C23B2C;
+    --line:#E4DCC5;
+    --line-2:#D8CEB2;
+    --on-brass:#3A2B08;
+    --shadow:0 1px 2px rgba(30,40,25,.06), 0 24px 60px -16px rgba(22,53,36,.35);
+    --radius:16px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{
+    min-height:100vh;
+    font-family:"Sarabun",system-ui,sans-serif;
+    color:var(--ink);
+    background-color:var(--paper);
+    background-image:
+      radial-gradient(900px 480px at 100% -8%, rgba(198,148,43,.14), transparent 60%),
+      radial-gradient(700px 420px at -5% 108%, rgba(30,70,50,.10), transparent 55%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='%231E4632' stroke-width='1.1' opacity='.08'%3E%3Ccircle cx='28' cy='168' r='24'/%3E%3Ccircle cx='168' cy='30' r='24'/%3E%3C/g%3E%3Cg fill='%23C6942B' opacity='.16'%3E%3Cpath d='M100 24c11 17 15.4 30 15.4 39.6 0 9-6.9 15-15.4 15s-15.4-6-15.4-15C84.6 54 89 41 100 24z'/%3E%3C/g%3E%3Cg fill='%23C6942B' opacity='.11' transform='rotate(28 52 128)'%3E%3Cpath d='M52 96c8.6 13.3 12 23.4 12 31 0 7-5.4 11.7-12 11.7S40 134 40 127c0-7.6 3.4-17.7 12-31z'/%3E%3C/g%3E%3C/svg%3E");
+    background-repeat:no-repeat, no-repeat, repeat;
+    background-attachment:fixed, fixed, fixed;
+  }
+  h1,h2{font-family:"Trirong",serif;margin:0;line-height:1.2}
+  button{font-family:inherit;cursor:pointer}
+  input{font-family:inherit;font-size:15px}
+  ::selection{background:var(--brass-soft)}
+
+  .stage{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px 18px}
+
+  .mark{
+    width:64px;height:64px;margin:0 auto 18px;flex:0 0 auto;
+    animation:settle .55s cubic-bezier(.2,.8,.2,1) both;
+  }
+  @keyframes settle{from{opacity:0;transform:translateY(-6px) scale(.92)}to{opacity:1;transform:none}}
+
+  .intro{text-align:center;margin-bottom:26px}
+  .intro h1{font-size:25px;font-weight:600;color:var(--pine-2);letter-spacing:.2px}
+  .intro p{margin:8px 0 0;color:var(--ink-soft);font-size:14.5px;max-width:320px;margin-left:auto;margin-right:auto}
+
+  .card{
+    width:100%;max-width:392px;background:var(--card);border-radius:var(--radius);
+    box-shadow:var(--shadow);border:1px solid rgba(30,40,25,.04);
+    padding:26px 26px 24px;
+  }
+
+  .tabs{display:flex;background:var(--paper-2);border-radius:11px;padding:4px;margin-bottom:22px}
+  .tab-btn{
+    flex:1;border:none;background:transparent;border-radius:8px;padding:9px 10px;
+    font-size:14px;font-weight:600;color:var(--ink-soft);transition:.16s;
+  }
+  .tab-btn.active{background:var(--card);color:var(--pine-2);box-shadow:0 1px 3px rgba(30,40,25,.1)}
+
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:13px;font-weight:600;color:var(--ink-soft);margin-bottom:6px}
+  .field input{
+    width:100%;padding:11px 13px;border:1px solid var(--line-2);border-radius:10px;
+    background:var(--paper);color:var(--ink);transition:.15s;
+  }
+  .field input:focus{outline:none;border-color:var(--brass);box-shadow:0 0 0 3px rgba(198,148,43,.18)}
+  .field input::placeholder{color:#B9B29A}
+
+  .hint{font-size:12.5px;color:var(--ink-soft);margin-top:6px}
+
+  .msg{font-size:13.5px;border-radius:9px;padding:10px 12px;margin:2px 0 14px;display:none}
+  .msg.show{display:block}
+  .msg.err{background:#FBEAE7;color:#8A2E22}
+  .msg.warn{background:#FDF3DC;color:#7A5410}
+  .msg.ok{background:#E6F1EA;color:#1E4632}
+
+  .btn-primary{
+    width:100%;border:none;border-radius:11px;padding:13px;font-weight:700;font-size:15.5px;
+    background:var(--brass);color:var(--on-brass);transition:.15s;
+    display:flex;align-items:center;justify-content:center;gap:8px;
+  }
+  .btn-primary:hover{filter:brightness(1.06);transform:translateY(-1px)}
+  .btn-primary:disabled{opacity:.6;cursor:default;transform:none;filter:none}
+  .btn-primary:focus-visible{outline:3px solid var(--pine-2);outline-offset:2px}
+
+  .spinner{width:15px;height:15px;border-radius:50%;border:2px solid rgba(58,43,8,.35);border-top-color:var(--on-brass);animation:spin .7s linear infinite;display:none}
+  .spinner.show{display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .divider{display:flex;align-items:center;gap:10px;margin:20px 0 14px;color:var(--ink-soft);font-size:12.5px}
+  .divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  .alt-link{display:block;text-align:center;font-size:13.5px;color:var(--pine-2);text-decoration:none;font-weight:600;padding:9px;border-radius:9px;transition:.15s}
+  .alt-link:hover{background:var(--paper-2)}
+
+  .foot{text-align:center;margin-top:22px;color:var(--ink-soft);font-size:12.5px}
+
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  @media(max-width:420px){
+    .card{padding:22px 20px 20px}
+    .intro h1{font-size:22px}
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div style="width:100%;max-width:392px">
+    <svg class="mark" viewBox="0 0 64 64" role="img" aria-label="ตราฟาร์ม">
+      <circle cx="32" cy="32" r="31" fill="none" stroke="#C6942B" stroke-width="1.4" opacity=".55"/>
+      <circle cx="32" cy="32" r="25" fill="#FBF7EC"/>
+      <g fill="#1E4632">
+        <circle cx="23" cy="24" r="4.4"/>
+        <circle cx="30" cy="20" r="4.8"/>
+        <circle cx="37" cy="24" r="4.4"/>
+        <circle cx="29" cy="33" r="10.5"/>
+      </g>
+      <path d="M38 33l12.5 4-12.5 5.2z" fill="#C6942B"/>
+      <path d="M35 42c1.6 2.5 2.4 4.5 2.4 6 0 1.8-1.4 2.9-3.2 2.9s-3.2-1.1-3.2-2.9c0-1.5.8-3.5 2.4-6" fill="#C23B2C" opacity=".85"/>
+      <circle cx="35.5" cy="30.5" r="1.3" fill="#FBF7EC"/>
+    </svg>
+    <div class="intro">
+      <h1>เข้าสู่ระบบฟาร์มของคุณ</h1>
+      <p>ระบบจัดคิวฝากผสมพันธุ์ไก่ชน ครบในที่เดียว ทั้งคิวลูกค้า การชำระเงิน และทีมงาน</p>
+    </div>
+
+    <div class="card">
+      <div class="tabs" role="tablist">
+        <button class="tab-btn active" id="tabSignin" role="tab" aria-selected="true">เข้าสู่ระบบ</button>
+        <button class="tab-btn" id="tabSignup" role="tab" aria-selected="false">สร้างฟาร์มใหม่</button>
+      </div>
+
+      <form id="authForm" autocomplete="on">
+        <div class="field">
+          <label for="fEmail">อีเมล</label>
+          <input type="email" id="fEmail" name="email" placeholder="farm@example.com" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="fPassword">รหัสผ่าน</label>
+          <input type="password" id="fPassword" name="password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="current-password" required>
+          <div class="hint" id="pwHint" style="display:none">ใช้สำหรับเข้าระบบฟาร์มของคุณในครั้งถัดไป ตั้งอย่างน้อย 6 ตัวอักษร</div>
+        </div>
+
+        <div class="msg" id="authMsg" role="alert"></div>
+
+        <button type="submit" class="btn-primary" id="btnSubmit">
+          <span class="spinner" id="spinner"></span>
+          <span id="btnLabel">เข้าสู่ระบบ</span>
+        </button>
+      </form>
+
+      <div class="divider">หรือ</div>
+      <a href="arom-dee-farm.html" class="alt-link">ลูกค้าต้องการตรวจสอบสถานะคิว →</a>
+    </div>
+
+    <div class="foot">ยังไม่มีฟาร์ม? กด "สร้างฟาร์มใหม่" ด้านบนเพื่อเริ่มต้นใช้งานฟรี</div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL="https://amabqchqpgivclykzaxo.supabase.co";
+const SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtYWJxY2hxcGdpdmNseWt6YXhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5NTM4OTgsImV4cCI6MjEwOTUyOTg5OH0.1ditpN1gq9j1hak6xJdLyYBxl025FLIKNS8ySW9SsKw";
+const sb=(window.supabase&&SUPABASE_URL&&SUPABASE_ANON_KEY)?window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY):null;
+
+let mode="signin"; // 'signin' | 'signup'
+const tabSignin=document.getElementById("tabSignin");
+const tabSignup=document.getElementById("tabSignup");
+const btnLabel=document.getElementById("btnLabel");
+const pwHint=document.getElementById("pwHint");
+const msgEl=document.getElementById("authMsg");
+const spinner=document.getElementById("spinner");
+const btnSubmit=document.getElementById("btnSubmit");
+
+function setMode(m){
+  mode=m;
+  const isSignup=m==="signup";
+  tabSignin.classList.toggle("active",!isSignup);
+  tabSignin.setAttribute("aria-selected",String(!isSignup));
+  tabSignup.classList.toggle("active",isSignup);
+  tabSignup.setAttribute("aria-selected",String(isSignup));
+  btnLabel.textContent=isSignup?"สร้างฟาร์มของฉัน":"เข้าสู่ระบบ";
+  pwHint.style.display=isSignup?"block":"none";
+  document.getElementById("fPassword").autocomplete=isSignup?"new-password":"current-password";
+  showMsg("");
+}
+tabSignin.addEventListener("click",()=>setMode("signin"));
+tabSignup.addEventListener("click",()=>setMode("signup"));
+
+function showMsg(text,kind){
+  if(!text){msgEl.className="msg";msgEl.textContent="";return;}
+  msgEl.className="msg show "+(kind||"err");
+  msgEl.textContent=text;
+}
+function setBusy(b){
+  btnSubmit.disabled=b;
+  spinner.classList.toggle("show",b);
+}
+
+document.getElementById("authForm").addEventListener("submit",async(e)=>{
+  e.preventDefault();
+  if(!sb){showMsg("ยังไม่ได้ตั้งค่าการเชื่อมต่อคลาวด์");return;}
+  const email=document.getElementById("fEmail").value.trim();
+  const password=document.getElementById("fPassword").value;
+  if(!email||!password){showMsg("กรอกอีเมลและรหัสผ่านให้ครบ");return;}
+  if(mode==="signup"&&password.length<6){showMsg("รหัสผ่านต้องยาวอย่างน้อย 6 ตัวอักษร");return;}
+
+  setBusy(true);showMsg("");
+  try{
+    if(mode==="signin"){
+      const {data,error}=await sb.auth.signInWithPassword({email,password});
+      if(error){showMsg("เข้าสู่ระบบไม่สำเร็จ: "+error.message);setBusy(false);return;}
+      showMsg("เข้าสู่ระบบสำเร็จ กำลังพาไปยังฟาร์มของคุณ...","ok");
+      setTimeout(()=>location.href="arom-dee-farm.html",500);
+    }else{
+      const {data,error}=await sb.auth.signUp({email,password});
+      if(error){showMsg("สร้างฟาร์มไม่สำเร็จ: "+error.message);setBusy(false);return;}
+      if(!data.session){
+        showMsg("สร้างบัญชีสำเร็จ! กรุณาเช็คอีเมลเพื่อยืนยันตัวตน แล้วกลับมากด \"เข้าสู่ระบบ\" อีกครั้ง","warn");
+        setBusy(false);
+        return;
+      }
+      showMsg("สร้างฟาร์มสำเร็จ กำลังพาไปตั้งค่าฟาร์มของคุณ...","ok");
+      setTimeout(()=>location.href="arom-dee-farm.html",500);
+    }
+  }catch(err){
+    showMsg("เกิดข้อผิดพลาด ลองใหม่อีกครั้ง");
+    setBusy(false);
+  }
+});
+
+// ถ้ามีเซสชันค้างอยู่แล้ว (ล็อกอินไว้ก่อนหน้า) พาไปหน้าแอปเลยโดยไม่ต้องกรอกซ้ำ
+(async function checkExisting(){
+  if(!sb)return;
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    if(session)location.href="arom-dee-farm.html";
+  }catch(err){}
+})();
+</script>
+</body>
+</html>
