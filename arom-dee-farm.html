@@ -256,6 +256,12 @@
   /* ---------- Staff mode ---------- */
   body:not([data-mode="staff"]) .staff-only{display:none}
   body[data-mode="staff"] .owner-only{display:none}
+  body:not([data-mode="customer"]) .customer-only{display:none}
+  body[data-mode="customer"] .owner-only{display:none}
+  .pay-box{display:flex;gap:14px;align-items:center;background:var(--paper-2);border:1px dashed var(--line-2);border-radius:10px;padding:12px 14px;margin-top:10px}
+  .pay-box img{width:74px;height:74px;border-radius:8px;object-fit:contain;background:#fff;flex:0 0 auto}
+  .pay-box .pb-k{font-size:11.5px;color:var(--ink-soft);font-weight:600}
+  .pay-box .pb-v{font-family:"Trirong",serif;font-size:15px;font-weight:600;color:var(--pine)}
   .staff-badge{color:#F4EFDF;font-weight:600;font-size:13.5px;padding:6px 4px;white-space:nowrap}
   .cloud-badge{font-size:12.5px;font-weight:600;padding:6px 10px;border-radius:999px;white-space:nowrap;display:none;align-items:center;gap:5px}
   .cloud-badge.show{display:inline-flex}
@@ -385,6 +391,15 @@
     </div>
   </div>
   <div class="grid" id="staffGrid"></div>
+</div>
+
+<!-- ==== CUSTOMER VIEW (ลูกค้าดูสถานะคิวของตัวเอง) ==== -->
+<div class="wrap customer-only" id="customerView">
+  <div class="sec-title">🐔 สถานะคิวฝากผสมของคุณ</div>
+  <div class="grid" id="customerGrid"></div>
+  <div style="text-align:center;margin-top:18px">
+    <button class="btn btn-line" id="btnCustomerExit">⎋ ออกจากหน้านี้</button>
+  </div>
 </div>
 
 <footer>ระบบบันทึกอัตโนมัติในเครื่อง (LocalStorage) · แนะนำให้กด “สำรองข้อมูล” เป็นระยะ</footer>
@@ -558,6 +573,21 @@
       </div>
       <div id="themePreview" style="margin:4px 0 14px"></div>
       <button class="btn btn-line btn-sm" id="btnResetTheme" type="button">ใช้สีเริ่มต้นของระบบ</button>
+
+      <div class="section-lbl">💰 ช่องทางการชำระเงิน (แสดงในหน้าลูกค้า)</div>
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">
+        <div id="stPayQrPreview" style="width:60px;height:60px;border-radius:10px;background:var(--paper-2);border:1px solid var(--line-2);display:grid;place-items:center;font-size:22px;overflow:hidden;flex:0 0 auto">💰</div>
+        <div style="flex:1;min-width:0">
+          <input type="file" id="stPayQrFile" accept="image/*" style="max-width:100%">
+          <div class="hint">รูป QR พร้อมเพย์ (PNG/JPG) ขนาดไม่เกิน 2MB</div>
+        </div>
+        <button class="btn btn-line btn-sm" id="btnRemovePayQr" type="button" style="white-space:nowrap">ลบรูป</button>
+      </div>
+      <div class="frow">
+        <div class="field"><label>ธนาคาร</label><input type="text" id="stBankName" placeholder="เช่น ธนาคารกสิกรไทย"></div>
+        <div class="field"><label>เลขบัญชี</label><input type="text" id="stBankAccount" placeholder="xxx-x-xxxxx-x"></div>
+      </div>
+      <div class="field" style="margin-bottom:4px"><label>ชื่อบัญชี</label><input type="text" id="stAccountHolder" placeholder="ชื่อ-นามสกุลเจ้าของบัญชี"></div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-line" data-close>ยกเลิก</button>
@@ -596,6 +626,26 @@
       <span style="flex:1"></span>
       <button class="btn btn-line" id="btnAuthSignup">สมัครใหม่</button>
       <button class="btn btn-primary" id="btnAuthSignin">เข้าสู่ระบบ</button>
+    </div>
+    <div style="text-align:center;padding:0 24px 18px">
+      <button class="btn btn-line" id="btnCustomerEntry" style="width:100%">🐔 ฉันเป็นลูกค้า — ตรวจสอบสถานะคิวของฉัน</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== CUSTOMER LOOKUP MODAL (ลูกค้าเช็คสถานะคิวด้วยชื่อ+เบอร์โทร) ===== -->
+<div class="overlay" id="customerLookupModal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-head"><h2>🐔 ตรวจสอบสถานะคิวของคุณ</h2><button class="x" data-close aria-label="ปิด">✕</button></div>
+    <div class="modal-body">
+      <p style="margin:0 0 14px;color:var(--ink-soft);font-size:13.5px">กรอกชื่อและเบอร์โทรที่แจ้งไว้ตอนฝากแม่ไก่ ให้ตรงกับที่ลงทะเบียนไว้</p>
+      <div class="field" style="margin-bottom:14px"><label>ชื่อลูกค้า <span class="req">*</span></label><input type="text" id="cuName" placeholder="เช่น คุณสมชาย ใจดี"></div>
+      <div class="field"><label>เบอร์โทร <span class="req">*</span></label><input type="tel" id="cuPhone" placeholder="08x-xxx-xxxx"></div>
+      <div class="msg" id="customerLookupMsg" role="alert"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-line" data-close>ยกเลิก</button>
+      <button class="btn btn-primary" id="btnCustomerLookup">ตรวจสอบ</button>
     </div>
   </div>
 </div>
@@ -719,9 +769,10 @@ const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}cat
 let sires=load(KEY_S,[]);
 let bookings=load(KEY_B,[]);
 const DEFAULT_THEME={primary:"#1E4632",accent:"#C6942B"};
-let settings=Object.assign({name:"อารมณ์ดี ฟาร์ม",phone:"",addr:"",terms:DEFAULT_TERMS,logo:null,themePrimary:DEFAULT_THEME.primary,themeAccent:DEFAULT_THEME.accent},load(KEY_SET,{}));
+let settings=Object.assign({name:"อารมณ์ดี ฟาร์ม",phone:"",addr:"",terms:DEFAULT_TERMS,logo:null,themePrimary:DEFAULT_THEME.primary,themeAccent:DEFAULT_THEME.accent,payQr:null,payBankName:"",payBankAccount:"",payAccountHolder:""},load(KEY_SET,{}));
 let currentStaff=load(KEY_STAFF,null);
 let viewMode="owner";
+let customerBookings=[];
 
 /* ================= Cloud sync (Supabase) =================
    โหมดนี้เก็บข้อมูลไว้ในเครื่อง (LocalStorage) เป็นหลักเหมือนเดิมเสมอ
@@ -806,7 +857,8 @@ async function cloudUpsertSettings(s){
   if(!cloudReady())return;
   const {error}=await sb.from("farms").update({
     name:s.name||"", phone:s.phone||null, address:s.addr||null, terms:s.terms||null,
-    logo_url:s.logo||null, theme_primary:s.themePrimary||DEFAULT_THEME.primary, theme_accent:s.themeAccent||DEFAULT_THEME.accent
+    logo_url:s.logo||null, theme_primary:s.themePrimary||DEFAULT_THEME.primary, theme_accent:s.themeAccent||DEFAULT_THEME.accent,
+    pay_qr_url:s.payQr||null, pay_bank_name:s.payBankName||null, pay_bank_account:s.payBankAccount||null, pay_account_holder:s.payAccountHolder||null
   }).eq("id",farmId);
   if(error)console.warn("sync การตั้งค่าขึ้นคลาวด์ไม่สำเร็จ",error);
 }
@@ -826,7 +878,9 @@ async function cloudFetchAll(){
     settings={
       name:farmRes.data.name||"อารมณ์ดี ฟาร์ม", phone:farmRes.data.phone||"", addr:farmRes.data.address||"",
       terms:farmRes.data.terms||DEFAULT_TERMS, logo:farmRes.data.logo_url||null,
-      themePrimary:farmRes.data.theme_primary||DEFAULT_THEME.primary, themeAccent:farmRes.data.theme_accent||DEFAULT_THEME.accent
+      themePrimary:farmRes.data.theme_primary||DEFAULT_THEME.primary, themeAccent:farmRes.data.theme_accent||DEFAULT_THEME.accent,
+      payQr:farmRes.data.pay_qr_url||null, payBankName:farmRes.data.pay_bank_name||"",
+      payBankAccount:farmRes.data.pay_bank_account||"", payAccountHolder:farmRes.data.pay_account_holder||""
     };
     save(KEY_SET,settings);
   }
@@ -865,7 +919,9 @@ async function cloudFetchAllForStaff(){
     settings={
       name:farmRes.data.name||"อารมณ์ดี ฟาร์ม", phone:farmRes.data.phone||"", addr:farmRes.data.address||"",
       terms:farmRes.data.terms||DEFAULT_TERMS, logo:farmRes.data.logo_url||null,
-      themePrimary:farmRes.data.theme_primary||DEFAULT_THEME.primary, themeAccent:farmRes.data.theme_accent||DEFAULT_THEME.accent
+      themePrimary:farmRes.data.theme_primary||DEFAULT_THEME.primary, themeAccent:farmRes.data.theme_accent||DEFAULT_THEME.accent,
+      payQr:farmRes.data.pay_qr_url||null, payBankName:farmRes.data.pay_bank_name||"",
+      payBankAccount:farmRes.data.pay_bank_account||"", payAccountHolder:farmRes.data.pay_account_holder||""
     };
     save(KEY_SET,settings);
   }
@@ -991,9 +1047,85 @@ document.getElementById("btnAuthSignup").addEventListener("click",async()=>{
   await afterLogin(data.session);
 });
 
-function escapeHtml(s){
-  return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+/* -------- ลูกค้าเช็คสถานะคิวด้วยชื่อ+เบอร์โทร (ไม่ต้องล็อกอิน) -------- */
+document.getElementById("btnCustomerEntry").addEventListener("click",()=>{
+  document.getElementById("cuName").value="";
+  document.getElementById("cuPhone").value="";
+  showMsg("customerLookupMsg","err","",[]);
+  openModal("customerLookupModal");
+});
+document.getElementById("btnCustomerLookup").addEventListener("click",async()=>{
+  if(!sb){showMsg("customerLookupMsg","err","",["ยังไม่ได้ตั้งค่าการเชื่อมต่อคลาวด์"]);return;}
+  const name=document.getElementById("cuName").value.trim();
+  const phone=document.getElementById("cuPhone").value.trim();
+  const errs=[];
+  if(!name)errs.push("กรุณากรอกชื่อลูกค้า");
+  if(!phone)errs.push("กรุณากรอกเบอร์โทร");
+  if(errs.length){showMsg("customerLookupMsg","err","",errs);return}
+  const {data,error}=await sb.rpc("customer_lookup_bookings",{p_name:name,p_phone:phone});
+  if(error){showMsg("customerLookupMsg","err","",["ตรวจสอบไม่สำเร็จ ลองใหม่อีกครั้ง"]);return;}
+  if(!data||!data.length){showMsg("customerLookupMsg","err","",["ไม่พบข้อมูล กรุณาตรวจสอบชื่อและเบอร์โทรให้ตรงกับที่แจ้งไว้"]);return;}
+  customerBookings=data.map(r=>({
+    id:r.id, farmName:r.farm_name, farmLogo:r.farm_logo, payQr:r.pay_qr_url,
+    payBankName:r.pay_bank_name, payBankAccount:r.pay_bank_account, payAccountHolder:r.pay_account_holder,
+    hen:r.hen_name, sireName:r.sire_name, sirePrice:Number(r.sire_price)||0,
+    arrival:r.arrival_date, breed:r.breed_start_date, incubate:r.incubation_date, hatch:r.hatch_date,
+    careDays:r.care_days??45, eggs:r.total_eggs||0, chicks:r.total_chicks||0, dead:r.dead_chicks||0,
+    delivered:!!r.delivered, note:r.note||"",
+    payments:[{amount:Number(r.paid_total)||0}]
+  }));
+  closeModals();
+  viewMode="customer";document.body.dataset.mode="customer";
+  document.getElementById("brandName").textContent=customerBookings[0].farmName||settings.name;
+  document.getElementById("logo").innerHTML=customerBookings[0].farmLogo?`<img src="${customerBookings[0].farmLogo}" alt="โลโก้ฟาร์ม">`:"🐓";
+  renderCustomerView();
+  toast("พบข้อมูลคิวของคุณแล้ว ✓");
+});
+document.getElementById("btnCustomerExit").addEventListener("click",()=>{
+  customerBookings=[];
+  viewMode="owner";document.body.dataset.mode=cloudRole==="staff"?"staff":"owner";
+  applyBrand();
+  openModal("authModal");
+});
+function customerCard(b){
+  const st=STATUS[statusOf(b)];
+  const bal=balanceOf(b), paid=paidOf(b);
+  const payBits=[];
+  if(b.payQr)payBits.push(`<img src="${b.payQr}" alt="QR พร้อมเพย์">`);
+  const payLines=[];
+  if(b.payBankName||b.payBankAccount)payLines.push(`<div class="pb-k">บัญชีธนาคาร</div><div class="pb-v">${esc(b.payBankName||"")} ${esc(b.payBankAccount||"")}</div>`);
+  if(b.payAccountHolder)payLines.push(`<div class="pb-k" style="margin-top:6px">ชื่อบัญชี</div><div class="pb-v">${esc(b.payAccountHolder)}</div>`);
+  return `<div class="bk">
+    <div class="bk-head">
+      <div class="bk-top">
+        <div>
+          <div class="bk-cust">${esc(b.farmName||"")}</div>
+          <div class="bk-hen">แม่ไก่: <b>${esc(b.hen)}</b> · พ่อพันธุ์: ${esc(b.sireName||"-")}</div>
+        </div>
+        <span class="badge ${st.c}">${st.t}</span>
+      </div>
+    </div>
+    ${timelineHTML(b)}
+    <div class="readonly-box" style="margin-top:14px">
+      <div class="ro-item"><div class="k">ค่าฝากผสม</div><div class="v">${baht(b.sirePrice)}</div></div>
+      <div class="ro-item"><div class="k">ชำระแล้ว</div><div class="v">${baht(paid)}</div></div>
+      <div class="ro-item"><div class="k">คงเหลือ</div><div class="v">${baht(bal)}</div></div>
+    </div>
+    ${(payBits.length||payLines.length)?`<div class="pay-box">${payBits.join("")}<div>${payLines.join("")}</div></div>`:""}
+    ${b.note?`<p style="margin:12px 0 0;color:var(--ink-soft);font-size:13px">📝 ${esc(b.note)}</p>`:""}
+  </div>`;
 }
+function renderCustomerView(){
+  const g=document.getElementById("customerGrid");
+  if(!customerBookings.length){
+    g.style.display="block";
+    g.innerHTML=`<div class="empty"><div class="em">🐔</div><h3>ไม่พบข้อมูล</h3></div>`;
+  }else{
+    g.style.display="grid";
+    g.innerHTML=customerBookings.map(customerCard).join("");
+  }
+}
+
 /* ================= Date helpers (ใช้วันที่แบบ UTC เที่ยงคืน ไม่คลาดเคลื่อนตามเขตเวลา) ================= */
 function uid(){
   // UUID v4 จริง (ต้องใช้กับคอลัมน์ uuid ของ Supabase ได้โดยตรง)
@@ -1625,6 +1757,7 @@ document.getElementById("btnSaveSire").addEventListener("click",()=>{
 
 /* -------- Settings -------- */
 let pendingLogo=undefined; // undefined = no change, null = remove, string = new dataURL
+let pendingPayQr=undefined;
 document.getElementById("btnSettings").addEventListener("click",()=>{
   document.getElementById("stName").value=settings.name;
   document.getElementById("stPhone").value=settings.phone;
@@ -1635,6 +1768,12 @@ document.getElementById("btnSettings").addEventListener("click",()=>{
   document.getElementById("stLogoPreview").innerHTML=settings.logo?`<img src="${settings.logo}" style="width:100%;height:100%;object-fit:cover">`:"🐓";
   document.getElementById("stPrimary").value=settings.themePrimary||DEFAULT_THEME.primary;
   document.getElementById("stAccent").value=settings.themeAccent||DEFAULT_THEME.accent;
+  pendingPayQr=undefined;
+  document.getElementById("stPayQrFile").value="";
+  document.getElementById("stPayQrPreview").innerHTML=settings.payQr?`<img src="${settings.payQr}" style="width:100%;height:100%;object-fit:cover">`:"💰";
+  document.getElementById("stBankName").value=settings.payBankName||"";
+  document.getElementById("stBankAccount").value=settings.payBankAccount||"";
+  document.getElementById("stAccountHolder").value=settings.payAccountHolder||"";
   renderThemeSwatches();
   renderThemePreviewBox();
   openModal("settingsModal");
@@ -1653,6 +1792,21 @@ document.getElementById("btnRemoveLogo").addEventListener("click",()=>{
   pendingLogo=null;
   document.getElementById("stLogoFile").value="";
   document.getElementById("stLogoPreview").innerHTML="🐓";
+});
+document.getElementById("stPayQrFile").addEventListener("change",async e=>{
+  const file=e.target.files[0];if(!file)return;
+  if(!file.type.startsWith("image/")){toast("กรุณาเลือกไฟล์รูปภาพ");e.target.value="";return;}
+  if(file.size>2*1024*1024){toast("ไฟล์ QR ต้องไม่เกิน 2MB");e.target.value="";return;}
+  try{
+    const dataUrl=await resizeLogo(file,480);
+    pendingPayQr=dataUrl;
+    document.getElementById("stPayQrPreview").innerHTML=`<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover">`;
+  }catch(err){toast("โหลดรูป QR ไม่สำเร็จ");}
+});
+document.getElementById("btnRemovePayQr").addEventListener("click",()=>{
+  pendingPayQr=null;
+  document.getElementById("stPayQrFile").value="";
+  document.getElementById("stPayQrPreview").innerHTML="💰";
 });
 document.getElementById("themeSwatches").addEventListener("click",e=>{
   const btn=e.target.closest(".swatch-btn");if(!btn)return;
@@ -1677,10 +1831,14 @@ document.getElementById("btnSaveSettings").addEventListener("click",()=>{
     logo:pendingLogo===undefined?prev.logo:pendingLogo,
     themePrimary:document.getElementById("stPrimary").value,
     themeAccent:document.getElementById("stAccent").value,
+    payQr:pendingPayQr===undefined?prev.payQr:pendingPayQr,
+    payBankName:document.getElementById("stBankName").value.trim(),
+    payBankAccount:document.getElementById("stBankAccount").value.trim(),
+    payAccountHolder:document.getElementById("stAccountHolder").value.trim(),
   };
   const ok=save(KEY_SET,settings);
   if(!ok){settings=prev;toast("บันทึกไม่สำเร็จ: พื้นที่จัดเก็บเต็ม ลองใช้โลโก้ไฟล์เล็กลง");return;}
-  pendingLogo=undefined;
+  pendingLogo=undefined;pendingPayQr=undefined;
   applyBrand();closeModals();toast("บันทึกการตั้งค่าแล้ว ✓");
   cloudUpsertSettings(settings);
 });
@@ -1985,8 +2143,8 @@ async function renderStaffList(){
   box.innerHTML=data.map(st=>`
     <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--panel-2);border-radius:10px">
       <div style="flex:1;min-width:0">
-        <div style="font-weight:700">${escapeHtml(st.name||"-")}</div>
-        <div style="font-size:12.5px;color:var(--ink-soft)">${escapeHtml(st.invited_email||"-")}</div>
+        <div style="font-weight:700">${esc(st.name||"-")}</div>
+        <div style="font-size:12.5px;color:var(--ink-soft)">${esc(st.invited_email||"-")}</div>
       </div>
       <span style="font-size:12px;font-weight:700;color:${st.user_id?"var(--ok,#2a8)" :"var(--ink-soft)"}">${st.user_id?"เชื่อมบัญชีแล้ว ✓":"รอพนักงานสมัคร"}</span>
       <button class="btn btn-ghost" style="padding:4px 10px" data-del-staff="${st.id}">ลบ</button>
