@@ -617,6 +617,27 @@
   </div>
 </div>
 
+<!-- ===== STAFF MANAGE MODAL (เจ้าของฟาร์ม เชิญ/ลบ พนักงาน แบบคลาวด์) ===== -->
+<div class="overlay" id="staffManageModal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-head"><h2>จัดการพนักงาน</h2><button class="x" data-close aria-label="ปิด">✕</button></div>
+    <div class="modal-body">
+      <p style="margin:0 0 14px;color:var(--ink-soft);font-size:13.5px">เชิญพนักงานด้วยอีเมล พนักงานจะสมัครบัญชีของตัวเอง และดูราคา/เบอร์ลูกค้าในฐานข้อมูลไม่ได้เลย</p>
+      <div class="frow">
+        <div class="field"><label>ชื่อพนักงาน <span class="req">*</span></label><input type="text" id="smName" placeholder="เช่น น้องเอ"></div>
+        <div class="field"><label>เบอร์โทร</label><input type="tel" id="smPhone" placeholder="08x-xxx-xxxx"></div>
+      </div>
+      <div class="field" style="margin-bottom:14px"><label>อีเมลพนักงาน <span class="req">*</span></label><input type="email" id="smEmail" placeholder="staff@example.com"></div>
+      <button class="btn btn-primary" id="btnInviteStaff" style="width:100%;margin-bottom:16px">+ เชิญพนักงาน</button>
+      <div class="msg" id="staffManageMsg" role="alert"></div>
+      <div id="staffList" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-line" data-close>ปิด</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== STAFF TIMELINE MODAL (กรอกได้เฉพาะไทม์ไลน์) ===== -->
 <div class="overlay" id="staffTimelineModal">
   <div class="modal" style="max-width:500px">
@@ -713,7 +734,14 @@ const SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const sb=(window.supabase&&SUPABASE_URL&&SUPABASE_ANON_KEY)?window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY):null;
 let farmId=null;        // id ของฟาร์มใน cloud (เมื่อล็อกอินสำเร็จ)
 let cloudSession=null;  // session ของ Supabase Auth ปัจจุบัน
+let cloudRole=null;     // 'owner' | 'staff' | null (เมื่อ login คลาวด์แล้ว)
 function cloudReady(){return !!(sb&&farmId&&cloudSession);}
+function resetStaffModeButton(){
+  const btn=document.getElementById("btnStaffMode");
+  if(!btn)return;
+  btn.style.display="";
+  btn.textContent="👷 โหมดพนักงาน";
+}
 
 function setCloudBadge(state){ // state: 'on' | 'off' | 'hide'
   const el=document.getElementById("cloudBadge");
@@ -727,7 +755,9 @@ function setCloudBadge(state){ // state: 'on' | 'off' | 'hide'
 function openCloudMenu(){
   if(confirm("ออกจากระบบฟาร์มนี้ (กลับไปใช้แบบออฟไลน์ในเครื่องนี้)?")){
     sb.auth.signOut();
-    cloudSession=null;farmId=null;
+    cloudSession=null;farmId=null;cloudRole=null;
+    resetStaffModeButton();
+    viewMode="owner";document.body.dataset.mode="owner";
     setCloudBadge("off");
     toast("ออกจากระบบฟาร์มแล้ว ทำงานแบบออฟไลน์ในเครื่องนี้");
   }
@@ -821,6 +851,53 @@ async function cloudFetchAll(){
   applyBrand();renderAll();
 }
 
+/* -------- ดึงข้อมูลสำหรับ "พนักงาน" (ผ่าน view ที่ซ่อนราคา/เบอร์ลูกค้า + RPC เท่านั้น) -------- */
+async function cloudFetchAllForStaff(){
+  if(!sb||!farmId)return;
+  const oldMediaById={};
+  bookings.forEach(b=>{if(b.media)oldMediaById[b.id]=b.media;});
+  const [farmRes,sireRes,bkRes]=await Promise.all([
+    sb.from("farms").select("*").eq("id",farmId).maybeSingle(),
+    sb.from("sires_staff_view").select("*").eq("farm_id",farmId),
+    sb.from("breedings_staff_view").select("*").eq("farm_id",farmId),
+  ]);
+  if(farmRes.data){
+    settings={
+      name:farmRes.data.name||"อารมณ์ดี ฟาร์ม", phone:farmRes.data.phone||"", addr:farmRes.data.address||"",
+      terms:farmRes.data.terms||DEFAULT_TERMS, logo:farmRes.data.logo_url||null,
+      themePrimary:farmRes.data.theme_primary||DEFAULT_THEME.primary, themeAccent:farmRes.data.theme_accent||DEFAULT_THEME.accent
+    };
+    save(KEY_SET,settings);
+  }
+  if(sireRes.data){
+    sires=sireRes.data.map(r=>({id:r.id,name:r.name,breed:r.breed||"",price:0,note:""}));
+    save(KEY_S,sires);
+  }
+  if(bkRes.data){
+    bookings=bkRes.data.map(r=>({
+      id:r.id, customer:r.customer_name||"", phone:"", hen:r.hen_name||"",
+      sireId:r.sire_id, sirePrice:0,
+      arrival:r.arrival_date, breed:r.breed_start_date, incubate:r.incubation_date, hatch:r.hatch_date,
+      careDays:r.care_days??45, eggs:r.total_eggs||0, chicks:r.total_chicks||0, dead:r.dead_chicks||0,
+      delivered:!!r.delivered, note:r.note||"", timelineUpdatedBy:r.timeline_updated_by||"",
+      payments:[], media:oldMediaById[r.id]||[],
+      createdAt:r.created_at?new Date(r.created_at).getTime():Date.now()
+    }));
+    save(KEY_B,bookings);
+  }
+  applyBrand();renderAll();
+}
+/* -------- พนักงานบันทึกไทม์ไลน์ผ่าน RPC เท่านั้น (ฐานข้อมูลเช็คสิทธิ์เองอีกชั้น) -------- */
+async function cloudStaffUpdateTimeline(b){
+  if(!cloudReady())return;
+  const {error}=await sb.rpc("staff_update_breeding_timeline",{
+    p_id:b.id, p_arrival:b.arrival||null, p_breed:b.breed||null, p_incubate:b.incubate||null, p_hatch:b.hatch||null,
+    p_care_days:(b.careDays??45), p_eggs:b.eggs||0, p_chicks:b.chicks||0, p_dead:b.dead||0,
+    p_note:b.note||null, p_staff_name:b.timelineUpdatedBy||(currentStaff?currentStaff.name:"")
+  });
+  if(error)console.warn("sync ไทม์ไลน์ของพนักงานขึ้นคลาวด์ไม่สำเร็จ",error);
+}
+
 /* -------- ย้ายข้อมูลเดิมในเครื่องนี้ขึ้นคลาวด์ครั้งแรก (ตอนล็อกอิน/สร้างฟาร์มครั้งแรก) -------- */
 async function cloudPushAllLocal(){
   if(!cloudReady())return;
@@ -829,7 +906,7 @@ async function cloudPushAllLocal(){
   await cloudUpsertSettings(settings);
 }
 
-/* -------- Auth: ล็อกอิน/สมัคร/จัดการ session -------- */
+/* -------- Auth: ล็อกอิน/สมัคร/จัดการ session + แยกสิทธิ์เจ้าของ/พนักงาน -------- */
 async function ensureFarmForUser(user){
   const {data:existing,error}=await sb.from("farms").select("id").eq("owner_id",user.id).maybeSingle();
   if(error){console.warn("ตรวจสอบฟาร์มไม่สำเร็จ",error);return null;}
@@ -840,22 +917,52 @@ async function ensureFarmForUser(user){
   if(cerr){console.warn("สร้างฟาร์มไม่สำเร็จ",cerr);return null;}
   return {id:created.id,created:true};
 }
+async function resolveRole(userId){
+  const {data:farmRow}=await sb.from("farms").select("id").eq("owner_id",userId).maybeSingle();
+  if(farmRow)return {role:"owner",farmId:farmRow.id};
+  const {data:staffRow}=await sb.from("staff").select("farm_id,name").eq("user_id",userId).maybeSingle();
+  if(staffRow)return {role:"staff",farmId:staffRow.farm_id,staffName:staffRow.name};
+  return {role:"new"};
+}
 async function afterLogin(session){
   cloudSession=session;
-  const farmInfo=await ensureFarmForUser(session.user);
-  if(!farmInfo){toast("เชื่อมต่อฐานข้อมูลไม่สำเร็จ ลองใหม่อีกครั้ง");return;}
-  farmId=farmInfo.id;
-  setCloudBadge("on");
+  const resolved=await resolveRole(session.user.id);
   closeModals();
-  const hasLocalData=sires.length>0||bookings.length>0;
-  if(farmInfo.created&&hasLocalData){
-    if(confirm("พบข้อมูลเดิมในเครื่องนี้ ("+sires.length+" พ่อพันธุ์, "+bookings.length+" คิว) ต้องการย้ายขึ้นคลาวด์เลยไหม?")){
-      toast("กำลังย้ายข้อมูลขึ้นคลาวด์...");
-      await cloudPushAllLocal();
-      toast("ย้ายข้อมูลขึ้นคลาวด์สำเร็จ ✓");
+  if(resolved.role==="owner"){
+    cloudRole="owner";farmId=resolved.farmId;
+    setCloudBadge("on");
+    viewMode="owner";document.body.dataset.mode="owner";
+    const btn=document.getElementById("btnStaffMode");
+    btn.style.display="";btn.textContent="👷 จัดการพนักงาน";
+    await cloudFetchAll();
+  }else if(resolved.role==="staff"){
+    cloudRole="staff";farmId=resolved.farmId;
+    currentStaff={name:resolved.staffName,phone:""};
+    save(KEY_STAFF,currentStaff);
+    setCloudBadge("on");
+    viewMode="staff";document.body.dataset.mode="staff";
+    document.getElementById("staffBadge").textContent="👷 "+resolved.staffName;
+    document.getElementById("btnStaffMode").style.display="none";
+    await cloudFetchAllForStaff();
+  }else{
+    const farmInfo=await ensureFarmForUser(session.user);
+    if(!farmInfo){toast("เชื่อมต่อฐานข้อมูลไม่สำเร็จ ลองใหม่อีกครั้ง");return;}
+    cloudRole="owner";farmId=farmInfo.id;
+    setCloudBadge("on");
+    viewMode="owner";document.body.dataset.mode="owner";
+    const btn=document.getElementById("btnStaffMode");
+    btn.style.display="";btn.textContent="👷 จัดการพนักงาน";
+    const hasLocalData=sires.length>0||bookings.length>0;
+    if(farmInfo.created&&hasLocalData){
+      if(confirm("พบข้อมูลเดิมในเครื่องนี้ ("+sires.length+" พ่อพันธุ์, "+bookings.length+" คิว) ต้องการย้ายขึ้นคลาวด์เลยไหม?")){
+        toast("กำลังย้ายข้อมูลขึ้นคลาวด์...");
+        await cloudPushAllLocal();
+        toast("ย้ายข้อมูลขึ้นคลาวด์สำเร็จ ✓");
+      }
     }
+    await cloudFetchAll();
   }
-  await cloudFetchAll();
+  renderAll();
   toast("เชื่อมต่อฐานข้อมูลคลาวด์แล้ว ✓");
 }
 document.getElementById("btnAuthSkip").addEventListener("click",()=>{closeModals();});
@@ -884,6 +991,9 @@ document.getElementById("btnAuthSignup").addEventListener("click",async()=>{
   await afterLogin(data.session);
 });
 
+function escapeHtml(s){
+  return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
 /* ================= Date helpers (ใช้วันที่แบบ UTC เที่ยงคืน ไม่คลาดเคลื่อนตามเขตเวลา) ================= */
 function uid(){
   // UUID v4 จริง (ต้องใช้กับคอลัมน์ uuid ของ Supabase ได้โดยตรง)
@@ -1825,6 +1935,7 @@ document.getElementById("fileImport").addEventListener("change",e=>{
 
 /* ================= โหมดพนักงานดูแลไก่ ================= */
 document.getElementById("btnStaffMode").addEventListener("click",()=>{
+  if(cloudRole==="owner"){openStaffManage();return;}
   document.getElementById("slName").value=currentStaff?currentStaff.name:"";
   document.getElementById("slPhone").value=currentStaff?currentStaff.phone:"";
   showMsg("staffLoginMsg","err","",[]);
@@ -1847,10 +1958,76 @@ document.getElementById("btnStaffLogin").addEventListener("click",()=>{
   renderStaffView();
   toast("เข้าสู่โหมดพนักงานแล้ว ✓");
 });
-document.getElementById("btnStaffLogout").addEventListener("click",()=>{
+document.getElementById("btnStaffLogout").addEventListener("click",async()=>{
+  if(cloudRole==="staff"){
+    if(sb)await sb.auth.signOut();
+    cloudSession=null;farmId=null;cloudRole=null;
+    currentStaff=null;save(KEY_STAFF,null);
+    resetStaffModeButton();
+    viewMode="owner";document.body.dataset.mode="owner";
+    setCloudBadge("off");
+    toast("ออกจากโหมดพนักงานแล้ว");
+    openModal("authModal");
+    return;
+  }
   viewMode="owner";
   document.body.dataset.mode="owner";
   toast("ออกจากโหมดพนักงานแล้ว");
+});
+
+/* ================= จัดการพนักงาน (เจ้าของฟาร์ม, คลาวด์) ================= */
+async function renderStaffList(){
+  const box=document.getElementById("staffList");
+  if(!cloudReady()){box.innerHTML="";return;}
+  const {data,error}=await sb.from("staff").select("*").eq("farm_id",farmId);
+  if(error){box.innerHTML="";return;}
+  if(!data.length){box.innerHTML='<p style="color:var(--ink-soft);font-size:13px;text-align:center;padding:10px">ยังไม่มีพนักงานที่เชิญ</p>';return;}
+  box.innerHTML=data.map(st=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--panel-2);border-radius:10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700">${escapeHtml(st.name||"-")}</div>
+        <div style="font-size:12.5px;color:var(--ink-soft)">${escapeHtml(st.invited_email||"-")}</div>
+      </div>
+      <span style="font-size:12px;font-weight:700;color:${st.user_id?"var(--ok,#2a8)" :"var(--ink-soft)"}">${st.user_id?"เชื่อมบัญชีแล้ว ✓":"รอพนักงานสมัคร"}</span>
+      <button class="btn btn-ghost" style="padding:4px 10px" data-del-staff="${st.id}">ลบ</button>
+    </div>`).join("");
+  box.querySelectorAll("[data-del-staff]").forEach(b=>{
+    b.addEventListener("click",async()=>{
+      if(!confirm("ลบพนักงานคนนี้ออกจากฟาร์ม?"))return;
+      await sb.from("staff").delete().eq("id",b.dataset.delStaff);
+      renderStaffList();
+    });
+  });
+}
+function openStaffManage(){
+  document.getElementById("smName").value="";
+  document.getElementById("smPhone").value="";
+  document.getElementById("smEmail").value="";
+  showMsg("staffManageMsg","err","",[]);
+  openModal("staffManageModal");
+  renderStaffList();
+}
+document.getElementById("btnInviteStaff").addEventListener("click",async()=>{
+  if(!cloudReady()){toast("ต้องเชื่อมต่อฐานข้อมูลคลาวด์ก่อน");return;}
+  const name=document.getElementById("smName").value.trim();
+  const phone=document.getElementById("smPhone").value.trim();
+  const email=document.getElementById("smEmail").value.trim().toLowerCase();
+  const errs=[];
+  if(!name)errs.push("กรุณากรอกชื่อพนักงาน");
+  if(!email)errs.push("กรุณากรอกอีเมลพนักงาน");
+  if(errs.length){showMsg("staffManageMsg","err","เชิญพนักงานไม่สำเร็จ",errs);return}
+  const {error}=await sb.from("staff").insert({farm_id:farmId,name,phone,invited_email:email});
+  if(error){
+    const dup=(error.message||"").toLowerCase().includes("dup")||(error.message||"").includes("unique");
+    showMsg("staffManageMsg","err","เชิญพนักงานไม่สำเร็จ",[dup?"อีเมลนี้ถูกเชิญไปแล้ว":"เกิดข้อผิดพลาด ลองใหม่อีกครั้ง"]);
+    return;
+  }
+  document.getElementById("smName").value="";
+  document.getElementById("smPhone").value="";
+  document.getElementById("smEmail").value="";
+  showMsg("staffManageMsg","err","",[]);
+  toast("เชิญพนักงานแล้ว ✓ ให้พนักงานสมัครด้วยอีเมลนี้");
+  renderStaffList();
 });
 
 function staffCard(b){
@@ -1957,7 +2134,8 @@ document.getElementById("btnSaveStaffTimeline").addEventListener("click",()=>{
   resetStaffWarn();
   closeModals();renderAll();
   toast("บันทึกไทม์ไลน์แล้ว ✓");
-  cloudUpsertBooking(b);
+  if(cloudRole==="staff")cloudStaffUpdateTimeline(b);
+  else cloudUpsertBooking(b);
 });
 
 /* -------- Media: รูปภาพ/วิดีโอแม่ไก่ (เก็บในเครื่องนี้ก่อน รอต่อคลาวด์ในเฟสถัดไป) -------- */
@@ -2079,7 +2257,7 @@ renderAll();
   try{
     const {data:{session}}=await sb.auth.getSession();
     if(session){
-      await afterLogin(session,{isNewFarm:false});
+      await afterLogin(session);
     }else if(!localStorage.getItem("adf_cloud_skip_v1")){
       openModal("authModal");
     }
