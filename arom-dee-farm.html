@@ -276,6 +276,7 @@
   .readonly-box .ro-item .v{font-family:"Trirong",serif;font-size:16px;font-weight:600;color:var(--pine)}
 
   /* ---------- Media gallery ---------- */
+  .bk-lot{display:inline-block;margin-top:5px;background:var(--brass-soft,#F3E2B3);color:var(--pine-2,#163524);border:1px solid var(--brass,#C6942B);border-radius:8px;padding:2px 9px;font-size:12.5px}
   .cu-media{margin-top:14px;border-top:1px dashed var(--line-2);padding-top:12px}
   .cu-media h4{margin:0 0 8px;font-size:14px;color:var(--pine)}
   .cu-media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
@@ -357,7 +358,7 @@
     <div class="toolbar">
       <div class="search">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        <input type="text" id="searchBox" placeholder="ค้นหา ชื่อลูกค้า หรือ ชื่อแม่ไก่...">
+        <input type="text" id="searchBox" placeholder="ค้นหา ชื่อลูกค้า ชื่อแม่ไก่ หรือ ล็อค...">
       </div>
       <div class="filter">
         <select id="filterStatus">
@@ -391,7 +392,7 @@
     <div class="toolbar">
       <div class="search">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        <input type="text" id="deliveredSearch" placeholder="ค้นหา ชื่อลูกค้า หรือ ชื่อแม่ไก่...">
+        <input type="text" id="deliveredSearch" placeholder="ค้นหา ชื่อลูกค้า ชื่อแม่ไก่ หรือ ล็อค...">
       </div>
     </div>
     <div class="grid" id="deliveredGrid"></div>
@@ -405,7 +406,7 @@
   <div class="toolbar">
     <div class="search">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-      <input type="text" id="staffSearch" placeholder="ค้นหา ชื่อลูกค้า หรือ ชื่อแม่ไก่...">
+      <input type="text" id="staffSearch" placeholder="ค้นหา ชื่อลูกค้า ชื่อแม่ไก่ หรือ ล็อค...">
     </div>
   </div>
   <div class="grid" id="staffGrid"></div>
@@ -440,6 +441,11 @@
           <label>พ่อพันธุ์ที่เลือกผสม <span class="req">*</span></label>
           <select id="fSire"></select>
         </div>
+      </div>
+      <div class="field">
+        <label>🔖 ล็อคผสมที่</label>
+        <input type="text" id="fLot" maxlength="60" placeholder="เช่น ล็อค A-12 / คอก 3 / โรงเรือนหลัง">
+        <div class="hint">ตำแหน่งที่แม่ไก่ตัวนี้อยู่ ช่วยให้พนักงานหาเจอเร็ว และลูกค้าเห็นในหน้าสถานะของตัวเอง</div>
       </div>
 
       <div class="section-lbl">💰 ค่าผสม</div>
@@ -716,6 +722,7 @@
       <div class="readonly-box">
         <div class="ro-item"><div class="k">ลูกค้า</div><div class="v" id="stCustomer">–</div></div>
         <div class="ro-item"><div class="k">แม่ไก่</div><div class="v" id="stHen">–</div></div>
+        <div class="ro-item"><div class="k">ล็อคผสมที่</div><div class="v" id="stLot">–</div></div>
         <div class="ro-item"><div class="k">พ่อพันธุ์</div><div class="v" id="stSire">–</div></div>
       </div>
       <div class="frow">
@@ -853,7 +860,14 @@ async function cloudUpsertBooking(b){
     care_days:(b.careDays??45), total_eggs:b.eggs||0, total_chicks:b.chicks||0, dead_chicks:b.dead||0,
     delivered:!!b.delivered, note:b.note||null, timeline_updated_by:b.timelineUpdatedBy||null
   };
-  const {error}=await sb.from("breedings").upsert(row);
+  row.lot=b.lot||null;
+  let {error}=await sb.from("breedings").upsert(row);
+  if(error&&/lot/i.test(error.message||"")){
+    /* ยังไม่ได้รัน SQL เพิ่มคอลัมน์ lot: sync ส่วนอื่นต่อไปก่อน ไม่ให้ทั้งคิวค้าง */
+    delete row.lot;
+    ({error}=await sb.from("breedings").upsert(row));
+    if(!error)console.warn("ยังไม่มีคอลัมน์ lot ในฐานข้อมูล: กรุณารัน SQL update5");
+  }
   if(error){console.warn("sync คิวขึ้นคลาวด์ไม่สำเร็จ",error);return;}
   // เก็บรายการชำระเงินแบบล้างแล้วใส่ใหม่ทั้งชุด (จำนวนรายการต่อคิวน้อย ทำแบบนี้ปลอดภัยสุด)
   await sb.from("payments").delete().eq("breeding_id",b.id);
@@ -907,7 +921,7 @@ async function cloudFetchAll(){
     const paysByBk={};
     (payRes.data||[]).forEach(p=>{(paysByBk[p.breeding_id]=paysByBk[p.breeding_id]||[]).push({id:p.id,date:p.paid_date,amount:Number(p.amount),method:p.method||"",note:p.note||""});});
     bookings=bkRes.data.map(r=>({
-      id:r.id, customer:r.customer_name||"", phone:r.customer_phone||"", hen:r.hen_name||"",
+      id:r.id, customer:r.customer_name||"", phone:r.customer_phone||"", hen:r.hen_name||"", lot:r.lot||"",
       sireId:r.sire_id, sirePrice:Number(r.sire_price)||0,
       arrival:r.arrival_date, breed:r.breed_start_date, incubate:r.incubation_date, hatch:r.hatch_date,
       careDays:r.care_days??45, eggs:r.total_eggs||0, chicks:r.total_chicks||0, dead:r.dead_chicks||0,
@@ -947,7 +961,7 @@ async function cloudFetchAllForStaff(){
   }
   if(bkRes.data){
     bookings=bkRes.data.map(r=>({
-      id:r.id, customer:r.customer_name||"", phone:"", hen:r.hen_name||"",
+      id:r.id, customer:r.customer_name||"", phone:"", hen:r.hen_name||"", lot:r.lot||"",
       sireId:r.sire_id, sirePrice:0,
       arrival:r.arrival_date, breed:r.breed_start_date, incubate:r.incubation_date, hatch:r.hatch_date,
       careDays:r.care_days??45, eggs:r.total_eggs||0, chicks:r.total_chicks||0, dead:r.dead_chicks||0,
@@ -1084,7 +1098,7 @@ document.getElementById("btnCustomerLookup").addEventListener("click",async()=>{
   customerBookings=data.map(r=>({
     id:r.id, farmName:r.farm_name, farmLogo:r.farm_logo, payQr:r.pay_qr_url,
     payBankName:r.pay_bank_name, payBankAccount:r.pay_bank_account, payAccountHolder:r.pay_account_holder,
-    hen:r.hen_name, sireName:r.sire_name, sirePrice:Number(r.sire_price)||0,
+    hen:r.hen_name, lot:r.lot||"", sireName:r.sire_name, sirePrice:Number(r.sire_price)||0,
     arrival:r.arrival_date, breed:r.breed_start_date, incubate:r.incubation_date, hatch:r.hatch_date,
     careDays:r.care_days??45, eggs:r.total_eggs||0, chicks:r.total_chicks||0, dead:r.dead_chicks||0,
     delivered:!!r.delivered, note:r.note||"",
@@ -1139,6 +1153,7 @@ function customerCard(b){
         <div>
           <div class="bk-cust">${esc(b.farmName||"")}</div>
           <div class="bk-hen">แม่ไก่: <b>${esc(b.hen)}</b> · พ่อพันธุ์: ${esc(b.sireName||"-")}</div>
+          ${b.lot?`<div class="bk-lot">🔖 ล็อคผสมที่: <b>${esc(b.lot)}</b></div>`:""}
         </div>
         <span class="badge ${st.c}">${st.t}</span>
       </div>
@@ -1324,6 +1339,7 @@ function bookingCard(b){
         <div>
           <div class="bk-cust">${esc(b.customer)}</div>
           <div class="bk-hen">แม่ไก่: <b>${esc(b.hen)}</b>${b.phone?` · ${esc(b.phone)}`:""}</div>
+          ${b.lot?`<div class="bk-lot">🔖 ล็อคผสมที่: <b>${esc(b.lot)}</b></div>`:""}
         </div>
         <span class="badge ${st.c}">${st.t}</span>
       </div>
@@ -1355,7 +1371,7 @@ function renderBookings(){
   const sort=document.getElementById("sortBy").value;
   const active=bookings.filter(b=>!b.delivered);
   let list=active.filter(b=>{
-    const matchQ=!q||b.customer.toLowerCase().includes(q)||b.hen.toLowerCase().includes(q);
+    const matchQ=!q||b.customer.toLowerCase().includes(q)||b.hen.toLowerCase().includes(q)||(b.lot||"").toLowerCase().includes(q);
     const matchS=!fs||statusOf(b)===fs;
     const matchP=!fp||(fp==="owe"?balanceOf(b)>0:balanceOf(b)===0);
     return matchQ&&matchS&&matchP;
@@ -1384,7 +1400,7 @@ function renderBookings(){
 function renderDelivered(){
   const q=document.getElementById("deliveredSearch").value.trim().toLowerCase();
   const done=bookings.filter(b=>b.delivered);
-  let list=done.filter(b=>!q||b.customer.toLowerCase().includes(q)||b.hen.toLowerCase().includes(q));
+  let list=done.filter(b=>!q||b.customer.toLowerCase().includes(q)||b.hen.toLowerCase().includes(q)||(b.lot||"").toLowerCase().includes(q));
   list.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   const cnt=document.getElementById("deliveredCnt");
   cnt.style.display=done.length?"inline-block":"none";cnt.textContent=done.length;
@@ -1610,7 +1626,7 @@ document.getElementById("fSire").addEventListener("change",e=>{
 
 function openBooking(){
   document.getElementById("bkModalTitle").textContent="เปิดคิวฝากผสม";
-  ["bkId","fCustomer","fPhone","fHen","fPrice","fDeposit","fArrival","fBreed","fIncubate","fHatch","fEggs","fChicks","fDead","fNote"].forEach(i=>document.getElementById(i).value="");
+  ["bkId","fCustomer","fPhone","fHen","fLot","fPrice","fDeposit","fArrival","fBreed","fIncubate","fHatch","fEggs","fChicks","fDead","fNote"].forEach(i=>document.getElementById(i).value="");
   document.getElementById("fDelivered").checked=false;
   document.getElementById("depositField").style.display="";
   fillSireSelect("");
@@ -1628,6 +1644,7 @@ window.editBooking=function(id){
   document.getElementById("fCustomer").value=b.customer;
   document.getElementById("fPhone").value=b.phone||"";
   document.getElementById("fHen").value=b.hen;
+  document.getElementById("fLot").value=b.lot||"";
   document.getElementById("fPrice").value=b.sirePrice??"";
   document.getElementById("fDeposit").value="";
   document.getElementById("depositField").style.display="none";
@@ -1712,6 +1729,7 @@ document.getElementById("btnSaveBooking").addEventListener("click",()=>{
     customer,hen,sireId,
     sirePrice:priceRaw===""?(sire?+sire.price:0):(+priceRaw||0),
     phone:g("fPhone").trim(),
+    lot:g("fLot").trim(),
     arrival:g("fArrival"),breed:g("fBreed"),incubate:g("fIncubate"),hatch:g("fHatch"),
     careDays:g("fCareDays")===""?45:+g("fCareDays"),
     eggs:+g("fEggs")||0,chicks:+g("fChicks")||0,dead:+g("fDead")||0,
@@ -2107,10 +2125,10 @@ function docHTML(type,b){
   const no=(isR?"RC":"DL")+"-"+created.toISOString().slice(0,10).replace(/-/g,"")+"-"+String(b.id).slice(-4).toUpperCase();
   const sireTxt=(sire?sire.name+(sire.breed?` (${sire.breed})`:""):"-");
   const rows=isR?[
-    ["ชื่อลูกค้า",b.customer],["เบอร์โทร",b.phone||"-"],["ชื่อแม่ไก่ที่ฝาก",b.hen],["พ่อพันธุ์ที่เลือกผสม",sireTxt],
+    ["ชื่อลูกค้า",b.customer],["เบอร์โทร",b.phone||"-"],["ชื่อแม่ไก่ที่ฝาก",b.hen],...(b.lot?[["ล็อคผสมที่",b.lot]]:[]),["พ่อพันธุ์ที่เลือกผสม",sireTxt],
     ["วันที่ไก่มาถึงฟาร์ม",fmtLong(b.arrival)],["ค่าผสม",baht(price)],["ชำระแล้ว (มัดจำ)",baht(paid)],["คงเหลือ",baht(bal),1],
   ]:[
-    ["ชื่อลูกค้า",b.customer],["ชื่อแม่ไก่",b.hen],["พ่อพันธุ์ที่ผสม",sireTxt],
+    ["ชื่อลูกค้า",b.customer],["ชื่อแม่ไก่",b.hen],...(b.lot?[["ล็อคผสมที่",b.lot]]:[]),["พ่อพันธุ์ที่ผสม",sireTxt],
     ["วันที่ลูกไก่เกิด",fmtLong(b.hatch)],["กำหนดส่งมอบ ("+careDaysOf(b)+" วัน)",fmtLong(dd)],
     ["ลูกไก่ทั้งหมด",(b.chicks||0)+" ตัว"],["ลูกไก่ที่ตาย",(b.dead||0)+" ตัว"],["ลูกไก่ที่ส่งมอบ",live+" ตัว",1],
     ["ค่าผสม",baht(price)],["ชำระแล้ว",baht(paid)],["ค้างชำระ",bal>0?baht(bal):"ไม่มี (ชำระครบ)",1],
@@ -2289,6 +2307,7 @@ function staffCard(b){
         <div>
           <div class="bk-cust">${esc(b.customer)}</div>
           <div class="bk-hen">แม่ไก่: <b>${esc(b.hen)}</b></div>
+          ${b.lot?`<div class="bk-lot">🔖 ล็อคผสมที่: <b>${esc(b.lot)}</b></div>`:""}
         </div>
         <span class="badge ${st.c}">${st.t}</span>
       </div>
@@ -2304,7 +2323,7 @@ function staffCard(b){
 function renderStaffView(){
   const el=document.getElementById("staffSearch");if(!el)return;
   const q=el.value.trim().toLowerCase();
-  const list=bookings.filter(b=>!b.delivered).filter(b=>!q||b.customer.toLowerCase().includes(q)||b.hen.toLowerCase().includes(q));
+  const list=bookings.filter(b=>!b.delivered).filter(b=>!q||b.customer.toLowerCase().includes(q)||b.hen.toLowerCase().includes(q)||(b.lot||"").toLowerCase().includes(q));
   list.sort((a,b)=>{
     const da=deliveryDate(a),db=deliveryDate(b);
     return (da?da.getTime():8e15)-(db?db.getTime():8e15);
@@ -2336,6 +2355,7 @@ window.openStaffTimeline=function(id){
   document.getElementById("stId").value=b.id;
   document.getElementById("stCustomer").textContent=b.customer;
   document.getElementById("stHen").textContent=b.hen;
+  document.getElementById("stLot").textContent=b.lot||"–";
   const s=sireById(b.sireId);
   document.getElementById("stSire").textContent=s?s.name:"(ไม่พบพ่อพันธุ์)";
   document.getElementById("stArrival").value=b.arrival||"";
