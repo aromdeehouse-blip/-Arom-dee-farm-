@@ -100,6 +100,9 @@
   .spinner.show{display:inline-block}
   @keyframes spin{to{transform:rotate(360deg)}}
 
+  .link-btn{display:block;background:none;border:none;padding:6px 0 0;font-size:13px;font-weight:600;color:var(--pine);text-decoration:underline;text-underline-offset:3px}
+  .link-btn:hover{color:var(--pine-2)}
+  .link-btn:focus-visible{outline:3px solid var(--brass);outline-offset:2px;border-radius:4px}
   .divider{display:flex;align-items:center;gap:10px;margin:20px 0 14px;color:var(--ink-soft);font-size:12.5px}
   .divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line)}
 
@@ -152,6 +155,7 @@
           <label for="fPassword">รหัสผ่าน</label>
           <input type="password" id="fPassword" name="password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="current-password" required>
           <div class="hint" id="pwHint" style="display:none">ใช้สำหรับเข้าระบบฟาร์มของคุณในครั้งถัดไป ตั้งอย่างน้อย 6 ตัวอักษร</div>
+          <button type="button" class="link-btn" id="btnForgot">ลืมรหัสผ่าน?</button>
         </div>
 
         <div class="msg" id="authMsg" role="alert"></div>
@@ -162,8 +166,9 @@
         </button>
       </form>
 
-      <div class="divider">หรือ</div>
-      <a href="arom-dee-farm.html" class="alt-link">ลูกค้าต้องการตรวจสอบสถานะคิว →</a>
+      <button type="button" class="link-btn" id="btnBackSignin" style="display:none;margin:14px auto 0;text-align:center">← กลับไปหน้าเข้าสู่ระบบ</button>
+      <div class="divider" id="dividerAlt">หรือ</div>
+      <a href="arom-dee-farm.html" class="alt-link" id="linkCustomer">ลูกค้าต้องการตรวจสอบสถานะคิว →</a>
     </div>
 
     <div class="foot">ยังไม่มีฟาร์ม? กด "สร้างฟาร์มใหม่" ด้านบนเพื่อเริ่มต้นใช้งานฟรี</div>
@@ -184,20 +189,47 @@ const msgEl=document.getElementById("authMsg");
 const spinner=document.getElementById("spinner");
 const btnSubmit=document.getElementById("btnSubmit");
 
+const fEmailField=document.getElementById("fEmail").closest(".field");
+const fPwField=document.getElementById("fPassword").closest(".field");
+const pwLabel=fPwField.querySelector("label");
+const tabsEl=document.querySelector(".tabs");
+const btnForgot=document.getElementById("btnForgot");
+const btnBackSignin=document.getElementById("btnBackSignin");
+const introH1=document.querySelector(".intro h1");
+const introP=document.querySelector(".intro p");
+const INTRO_DEFAULT={h:introH1.textContent,p:introP.textContent};
+
+// mode: 'signin' | 'signup' | 'reset' (ขอลิงก์ตั้งรหัสใหม่) | 'recovery' (ตั้งรหัสใหม่หลังกดลิงก์ในอีเมล)
 function setMode(m){
   mode=m;
-  const isSignup=m==="signup";
-  tabSignin.classList.toggle("active",!isSignup);
-  tabSignin.setAttribute("aria-selected",String(!isSignup));
+  const isSignup=m==="signup", isReset=m==="reset", isRecovery=m==="recovery";
+  const special=isReset||isRecovery;
+  tabsEl.style.display=special?"none":"flex";
+  fEmailField.style.display=isRecovery?"none":"block";
+  fPwField.style.display=isReset?"none":"block";
+  document.getElementById("fPassword").required=!isReset;
+  document.getElementById("fEmail").required=!isRecovery;
+  btnForgot.style.display=(m==="signin")?"block":"none";
+  btnBackSignin.style.display=special?"block":"none";
+  document.getElementById("dividerAlt").style.display=special?"none":"flex";
+  document.getElementById("linkCustomer").style.display=special?"none":"block";
+  tabSignin.classList.toggle("active",m==="signin");
+  tabSignin.setAttribute("aria-selected",String(m==="signin"));
   tabSignup.classList.toggle("active",isSignup);
   tabSignup.setAttribute("aria-selected",String(isSignup));
-  btnLabel.textContent=isSignup?"สร้างฟาร์มของฉัน":"เข้าสู่ระบบ";
-  pwHint.style.display=isSignup?"block":"none";
-  document.getElementById("fPassword").autocomplete=isSignup?"new-password":"current-password";
+  btnLabel.textContent=isSignup?"สร้างฟาร์มของฉัน":isReset?"ส่งลิงก์ตั้งรหัสผ่านใหม่":isRecovery?"บันทึกรหัสผ่านใหม่":"เข้าสู่ระบบ";
+  pwLabel.textContent=isRecovery?"รหัสผ่านใหม่":"รหัสผ่าน";
+  pwHint.style.display=(isSignup||isRecovery)?"block":"none";
+  document.getElementById("fPassword").autocomplete=(isSignup||isRecovery)?"new-password":"current-password";
+  if(isReset){introH1.textContent="ลืมรหัสผ่าน";introP.textContent="กรอกอีเมลที่ใช้สมัคร เราจะส่งลิงก์สำหรับตั้งรหัสผ่านใหม่ไปให้";}
+  else if(isRecovery){introH1.textContent="ตั้งรหัสผ่านใหม่";introP.textContent="กรอกรหัสผ่านใหม่ของคุณ แล้วระบบจะพาเข้าสู่ฟาร์มทันที";}
+  else{introH1.textContent=INTRO_DEFAULT.h;introP.textContent=INTRO_DEFAULT.p;}
   showMsg("");
 }
 tabSignin.addEventListener("click",()=>setMode("signin"));
 tabSignup.addEventListener("click",()=>setMode("signup"));
+btnForgot.addEventListener("click",()=>setMode("reset"));
+btnBackSignin.addEventListener("click",()=>{history.replaceState(null,"",location.pathname);setMode("signin");});
 
 function showMsg(text,kind){
   if(!text){msgEl.className="msg";msgEl.textContent="";return;}
@@ -214,6 +246,30 @@ document.getElementById("authForm").addEventListener("submit",async(e)=>{
   if(!sb){showMsg("ยังไม่ได้ตั้งค่าการเชื่อมต่อคลาวด์");return;}
   const email=document.getElementById("fEmail").value.trim();
   const password=document.getElementById("fPassword").value;
+
+  if(mode==="reset"){
+    if(!email){showMsg("กรอกอีเมลที่ใช้สมัคร");return;}
+    setBusy(true);showMsg("");
+    try{
+      const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+      if(error){showMsg("ส่งลิงก์ไม่สำเร็จ: "+error.message);setBusy(false);return;}
+      showMsg("ส่งลิงก์ไปที่อีเมลแล้ว กรุณาเช็คกล่องจดหมาย (รวมถึงสแปม) แล้วกดลิงก์เพื่อตั้งรหัสผ่านใหม่","ok");
+    }catch(err){showMsg("เกิดข้อผิดพลาด ลองใหม่อีกครั้ง");}
+    setBusy(false);
+    return;
+  }
+  if(mode==="recovery"){
+    if(password.length<6){showMsg("รหัสผ่านต้องยาวอย่างน้อย 6 ตัวอักษร");return;}
+    setBusy(true);showMsg("");
+    try{
+      const {error}=await sb.auth.updateUser({password});
+      if(error){showMsg("ตั้งรหัสผ่านไม่สำเร็จ: "+error.message);setBusy(false);return;}
+      showMsg("ตั้งรหัสผ่านใหม่สำเร็จ กำลังพาไปยังฟาร์มของคุณ...","ok");
+      setTimeout(()=>location.href="arom-dee-farm.html",700);
+    }catch(err){showMsg("เกิดข้อผิดพลาด ลองใหม่อีกครั้ง");setBusy(false);}
+    return;
+  }
+
   if(!email||!password){showMsg("กรอกอีเมลและรหัสผ่านให้ครบ");return;}
   if(mode==="signup"&&password.length<6){showMsg("รหัสผ่านต้องยาวอย่างน้อย 6 ตัวอักษร");return;}
 
@@ -241,14 +297,24 @@ document.getElementById("authForm").addEventListener("submit",async(e)=>{
   }
 });
 
-// ถ้ามีเซสชันค้างอยู่แล้ว (ล็อกอินไว้ก่อนหน้า) พาไปหน้าแอปเลยโดยไม่ต้องกรอกซ้ำ
+// กดลิงก์ "ตั้งรหัสผ่านใหม่" จากอีเมล: Supabase พากลับมาหน้านี้พร้อม #...type=recovery
+const isRecoveryLink=/type=recovery/.test(location.hash);
+if(sb){
+  sb.auth.onAuthStateChange((event)=>{ if(event==="PASSWORD_RECOVERY")setMode("recovery"); });
+}
+if(isRecoveryLink)setMode("recovery");
+
+// ถ้ามีเซสชันค้างอยู่แล้ว (ล็อกอินไว้ก่อนหน้า) พาไปหน้าแอปเลยโดยไม่ต้องกรอกซ้ำ (ยกเว้นกำลังตั้งรหัสใหม่)
 (async function checkExisting(){
-  if(!sb)return;
+  if(!sb||isRecoveryLink)return;
   try{
     const {data:{session}}=await sb.auth.getSession();
-    if(session)location.href="arom-dee-farm.html";
+    if(session&&mode!=="recovery")location.href="arom-dee-farm.html";
   }catch(err){}
 })();
+// เปิดจากปุ่ม "ลืมรหัสผ่าน" ในเว็บหลัก: index.html?reset=1
+if(/[?&]reset=1/.test(location.search))setMode("reset");
+setMode(mode==="signin"&&!isRecoveryLink&&!/[?&]reset=1/.test(location.search)?"signin":mode);
 </script>
 </body>
 </html>
