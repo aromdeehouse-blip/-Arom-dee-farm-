@@ -306,6 +306,14 @@
   </div>
 </div>
 
+<div class="wrap owner-only" id="backupBanner" style="display:none;padding-bottom:0">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#FFF4D6;border:1px solid #E5C568;border-radius:10px;padding:10px 14px;font-size:13.5px">
+    <span id="backupBannerText" style="flex:1;min-width:200px"></span>
+    <button class="btn btn-primary" id="btnBackupNow" style="padding:6px 12px">⬇ สำรองเลย</button>
+    <button class="btn btn-ghost" id="btnBackupLater" style="padding:6px 12px">เตือนใหม่ใน 7 วัน</button>
+  </div>
+</div>
+
 <div class="wrap owner-only" id="ownerView">
 
   <div class="stats" id="stats"></div>
@@ -2066,12 +2074,32 @@ window.printDoc=function(type,id){
 };
 
 /* ================= Backup / Restore ================= */
-document.getElementById("btnExport").addEventListener("click",()=>{
+const KEY_BK="adf_lastbackup_v1", BK_DAYS=7;
+function bkGet(){try{return JSON.parse(localStorage.getItem(KEY_BK)||"{}")}catch(e){return {}}}
+function bkSet(o){try{localStorage.setItem(KEY_BK,JSON.stringify(Object.assign(bkGet(),o)))}catch(e){}}
+function safeFileName(s){return (String(s||"").replace(/[\\/:*?"<>|]+/g,"").trim()||"ฟาร์ม")}
+function doBackup(){
   const blob=new Blob([JSON.stringify({sires,bookings,settings,exportedAt:new Date().toISOString()},null,2)],{type:"application/json"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);
-  a.download=`อารมณ์ดีฟาร์ม-สำรอง-${todayISO()}.json`;a.click();
+  a.download=`${safeFileName(settings.name)}-สำรอง-${todayISO()}.json`;a.click();
+  bkSet({last:Date.now(),snooze:0});
   toast("ดาวน์โหลดไฟล์สำรองแล้ว ✓");
-});
+  renderBackupBanner();
+}
+function renderBackupBanner(){
+  const el=document.getElementById("backupBanner");if(!el)return;
+  const st=bkGet(), now=Date.now(), DAY=86400000;
+  if(!st.first){bkSet({first:now});st.first=now;}
+  const hasData=(bookings&&bookings.length)||(sires&&sires.length);
+  const base=st.last||st.first;
+  const days=Math.floor((now-base)/DAY);
+  const due=hasData&&days>=BK_DAYS&&!(st.snooze&&now<st.snooze);
+  el.style.display=due?"":"none";
+  if(due)document.getElementById("backupBannerText").textContent=st.last?`⚠️ ยังไม่ได้สำรองข้อมูลมา ${days} วันแล้ว`:`⚠️ ยังไม่เคยสำรองข้อมูลเป็นไฟล์เลย (ใช้งานมา ${days} วัน)`;
+}
+document.getElementById("btnExport").addEventListener("click",doBackup);
+document.getElementById("btnBackupNow").addEventListener("click",doBackup);
+document.getElementById("btnBackupLater").addEventListener("click",()=>{bkSet({snooze:Date.now()+BK_DAYS*86400000});renderBackupBanner();});
 document.getElementById("btnImport").addEventListener("click",()=>document.getElementById("fileImport").click());
 document.getElementById("fileImport").addEventListener("change",e=>{
   const f=e.target.files[0];if(!f)return;
@@ -2404,7 +2432,7 @@ document.getElementById("btnAddSire").addEventListener("click",openSire);
 document.getElementById("deliveredSearch").addEventListener("input",renderDelivered);
 
 /* ================= Render ================= */
-function renderAll(){renderStats();renderToday();renderBookings();renderDelivered();renderSires();renderStaffView();}
+function renderAll(){renderStats();renderToday();renderBookings();renderDelivered();renderSires();renderStaffView();renderBackupBanner();}
 applyBrand();
 document.body.dataset.mode="owner";
 renderAll();
