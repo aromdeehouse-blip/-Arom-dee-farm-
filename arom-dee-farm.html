@@ -272,6 +272,12 @@
   .readonly-box .ro-item .v{font-family:"Trirong",serif;font-size:16px;font-weight:600;color:var(--pine)}
 
   /* ---------- Media gallery ---------- */
+  .cu-media{margin-top:14px;border-top:1px dashed var(--line-2);padding-top:12px}
+  .cu-media h4{margin:0 0 8px;font-size:14px;color:var(--pine)}
+  .cu-media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
+  .cu-media-item{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--card)}
+  .cu-media-item img,.cu-media-item video{width:100%;height:96px;object-fit:cover;display:block;background:#1b1b18;cursor:pointer}
+  .cu-media-item .cap{padding:5px 7px;font-size:10.5px;color:var(--ink-soft);line-height:1.35}
   .media-hint{margin:0 0 12px;color:var(--ink-soft);font-size:13px;background:var(--paper-2);border-radius:8px;padding:8px 12px}
   .media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:18px}
   .media-item{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--card)}
@@ -747,7 +753,7 @@
     <div class="modal-head"><h2 id="mediaTitle">รูปภาพ/วิดีโอแม่ไก่</h2><button class="x" data-close aria-label="ปิด">✕</button></div>
     <div class="modal-body">
       <input type="hidden" id="mdBk">
-      <p class="media-hint">📌 ไฟล์จะถูกเก็บไว้ในเครื่องนี้เท่านั้น (ยังไม่เชื่อมคลาวด์) แนะนำให้ใช้ไฟล์ขนาดเล็ก — รูปไม่เกิน 5MB และวิดีโอไม่เกิน 15MB</p>
+      <p class="media-hint" id="mediaHint"></p>
       <div id="mediaGallery" class="media-grid"></div>
       <div class="section-lbl">📎 เพิ่มรูปภาพหรือวิดีโอใหม่</div>
       <input type="file" id="mediaFile" accept="image/*,video/*">
@@ -912,6 +918,7 @@ async function cloudFetchAll(){
     save(KEY_B,bookings);
   }
   applyBrand();renderAll();
+  await cloudFetchMedia();
 }
 
 /* -------- ดึงข้อมูลสำหรับ "พนักงาน" (ผ่าน view ที่ซ่อนราคา/เบอร์ลูกค้า + RPC เท่านั้น) -------- */
@@ -951,6 +958,7 @@ async function cloudFetchAllForStaff(){
     save(KEY_B,bookings);
   }
   applyBrand();renderAll();
+  await cloudFetchMedia();
 }
 /* -------- พนักงานบันทึกไทม์ไลน์ผ่าน RPC เท่านั้น (ฐานข้อมูลเช็คสิทธิ์เองอีกชั้น) -------- */
 async function cloudStaffUpdateTimeline(b){
@@ -1081,8 +1089,17 @@ document.getElementById("btnCustomerLookup").addEventListener("click",async()=>{
     arrival:r.arrival_date, breed:r.breed_start_date, incubate:r.incubation_date, hatch:r.hatch_date,
     careDays:r.care_days??45, eggs:r.total_eggs||0, chicks:r.total_chicks||0, dead:r.dead_chicks||0,
     delivered:!!r.delivered, note:r.note||"",
-    payments:[{amount:Number(r.paid_total)||0}]
+    payments:[{amount:Number(r.paid_total)||0}], media:[]
   }));
+  try{
+    const mres=await sb.rpc("customer_lookup_media",{p_name:name,p_phone:phone});
+    if(mres&&mres.data){
+      mres.data.forEach(m=>{
+        const bk=customerBookings.find(x=>x.id===m.breeding_id);
+        if(bk)bk.media.push({type:m.media_type,url:m.url,caption:m.caption||"",addedAt:m.created_at?new Date(m.created_at).getTime():0});
+      });
+    }
+  }catch(e){console.warn("ดึงรูป/วิดีโอไม่สำเร็จ",e)}
   closeModals();
   viewMode="customer";document.body.dataset.mode="customer";
   document.getElementById("brandName").textContent=customerBookings[0].farmName||settings.name;
@@ -1096,6 +1113,17 @@ document.getElementById("btnCustomerExit").addEventListener("click",()=>{
   applyBrand();
   openModal("authModal");
 });
+function mediaBlockHTML(b){
+  const list=(b.media||[]).slice().sort((a,c)=>(c.addedAt||0)-(a.addedAt||0));
+  if(!list.length)return "";
+  return `<div class="cu-media"><h4>📷 รูป/วิดีโออัปเดตล่าสุด (${list.length})</h4><div class="cu-media-grid">${
+    list.map(m=>`<div class="cu-media-item">${
+      m.type==="video"
+        ?`<video src="${esc(m.url)}" controls preload="metadata" playsinline></video>`
+        :`<a href="${esc(m.url)}" target="_blank" rel="noopener"><img src="${esc(m.url)}" alt="${esc(m.caption||"รูปแม่ไก่")}" loading="lazy"></a>`
+    }<div class="cap">${m.caption?esc(m.caption)+"<br>":""}${m.addedAt?fmtTH(toISO(new Date(m.addedAt))):""}</div></div>`).join("")
+  }</div></div>`;
+}
 function customerCard(b){
   const st=STATUS[statusOf(b)];
   const bal=balanceOf(b), paid=paidOf(b);
@@ -1120,6 +1148,7 @@ function customerCard(b){
       <div class="ro-item"><div class="k">ชำระแล้ว</div><div class="v">${baht(paid)}</div></div>
       <div class="ro-item"><div class="k">คงเหลือ</div><div class="v">${baht(bal)}</div></div>
     </div>
+    ${mediaBlockHTML(b)}
     ${(payBits.length||payLines.length)?`<div class="pay-box">${payBits.join("")}<div>${payLines.join("")}</div></div>`:""}
     ${b.note?`<p style="margin:12px 0 0;color:var(--ink-soft);font-size:13px">📝 ${esc(b.note)}</p>`:""}
   </div>`;
@@ -2326,7 +2355,78 @@ document.getElementById("btnSaveStaffTimeline").addEventListener("click",()=>{
 });
 
 /* -------- Media: รูปภาพ/วิดีโอแม่ไก่ (เก็บในเครื่องนี้ก่อน รอต่อคลาวด์ในเฟสถัดไป) -------- */
-const MAX_IMAGE_BYTES=5*1024*1024, MAX_VIDEO_BYTES=15*1024*1024;
+const MAX_IMAGE_BYTES=10*1024*1024;
+const MAX_VIDEO_LOCAL=15*1024*1024, MAX_VIDEO_CLOUD=50*1024*1024;
+const MEDIA_BUCKET="farm-media";
+function mediaSrc(m){return m.url||m.dataUrl||""}
+function mediaHintText(){
+  return cloudReady()
+    ?"☁️ ไฟล์จะอัปโหลดขึ้นคลาวด์ และ<b>ลูกค้าจะเห็นในหน้าสถานะคิวของเขา</b> — รูปไม่เกิน 10MB (ย่อให้อัตโนมัติ) วิดีโอไม่เกิน 50MB"
+    :"📌 ยังไม่ได้เชื่อมคลาวด์ ไฟล์จะเก็บไว้ในเครื่องนี้เท่านั้น และลูกค้าจะไม่เห็น — รูปไม่เกิน 10MB วิดีโอไม่เกิน 15MB";
+}
+function resizeImageBlob(file,maxW,quality){
+  maxW=maxW||1280;quality=quality||0.82;
+  return new Promise((resolve,reject)=>{
+    const img=new Image();const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      let w=img.width,h=img.height;
+      if(w>maxW){h=Math.round(h*maxW/w);w=maxW;}
+      const c=document.createElement("canvas");c.width=w;c.height=h;
+      c.getContext("2d").drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(url);
+      c.toBlob(b=>b?resolve(b):reject(new Error("ย่อรูปไม่สำเร็จ")),"image/jpeg",quality);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error("โหลดรูปไม่สำเร็จ หรือไฟล์เสียหาย"))};
+    img.src=url;
+  });
+}
+function extOf(file){
+  const t=(file.type||"").toLowerCase();
+  if(t==="video/quicktime")return "mov";
+  if(t==="video/webm")return "webm";
+  if(t.startsWith("video/"))return "mp4";
+  return "jpg";
+}
+/* อัปโหลดไฟล์ขึ้น Supabase Storage แล้วบันทึกรายการลงตาราง breeding_media */
+async function cloudUploadMedia(bookingId,blob,contentType,ext,type,caption,addedBy){
+  const path=`${farmId}/${bookingId}/${uid()}.${ext}`;
+  const up=await sb.storage.from(MEDIA_BUCKET).upload(path,blob,{contentType,upsert:false});
+  if(up.error)throw new Error("อัปโหลดไม่สำเร็จ: "+up.error.message);
+  const pub=sb.storage.from(MEDIA_BUCKET).getPublicUrl(path);
+  const url=pub&&pub.data?pub.data.publicUrl:"";
+  const id=uid();
+  const ins=await sb.from("breeding_media").insert({
+    id,farm_id:farmId,breeding_id:bookingId,media_type:type,url,path,caption:caption||null,added_by:addedBy||null
+  });
+  if(ins.error){
+    await sb.storage.from(MEDIA_BUCKET).remove([path]);
+    throw new Error("บันทึกรายการไม่สำเร็จ: "+ins.error.message);
+  }
+  return {id,type,url,path,caption:caption||"",addedBy:addedBy||"",addedAt:Date.now()};
+}
+async function cloudDeleteMedia(m){
+  if(!cloudReady()||!m||!m.path)return;
+  await sb.storage.from(MEDIA_BUCKET).remove([m.path]);
+  const {error}=await sb.from("breeding_media").delete().eq("id",m.id);
+  if(error)console.warn("ลบรายการรูป/วิดีโอบนคลาวด์ไม่สำเร็จ",error);
+}
+/* ดึงรายการรูป/วิดีโอจากคลาวด์ แล้วรวมกับไฟล์ที่เก็บเฉพาะในเครื่อง (ยังไม่ได้อัปโหลด) */
+async function cloudFetchMedia(){
+  if(!cloudReady())return;
+  const {data,error}=await sb.from("breeding_media").select("*").eq("farm_id",farmId);
+  if(error||!data)return;
+  const byBk={};
+  data.forEach(r=>{(byBk[r.breeding_id]=byBk[r.breeding_id]||[]).push({
+    id:r.id,type:r.media_type,url:r.url,path:r.path||null,caption:r.caption||"",addedBy:r.added_by||"",
+    addedAt:r.created_at?new Date(r.created_at).getTime():Date.now()
+  });});
+  bookings.forEach(b=>{
+    const localOnly=(b.media||[]).filter(m=>!m.url&&m.dataUrl);
+    b.media=[...(byBk[b.id]||[]),...localOnly];
+  });
+  save(KEY_B,bookings);
+  renderAll();
+}
 function readAsDataURL(file){
   return new Promise((resolve,reject)=>{
     const r=new FileReader();
@@ -2359,6 +2459,7 @@ window.openMedia=function(id){
   document.getElementById("mediaTitle").textContent="รูปภาพ/วิดีโอ · แม่ไก่ "+b.hen;
   document.getElementById("mediaFile").value="";
   document.getElementById("mediaCaption").value="";
+  document.getElementById("mediaHint").innerHTML=mediaHintText();
   showMsg("mediaMsg","err","",[]);
   renderMediaGallery();
   openModal("mediaModal");
@@ -2368,7 +2469,7 @@ function renderMediaGallery(){
   const list=(b.media||[]).slice().sort((a,c)=>(c.addedAt||0)-(a.addedAt||0));
   const g=document.getElementById("mediaGallery");
   g.innerHTML=list.length?list.map(m=>`<div class="media-item">
-      ${m.type==="video"?`<video src="${m.dataUrl}" controls></video>`:`<img src="${m.dataUrl}" alt="${esc(m.caption||"รูปแม่ไก่")}" loading="lazy">`}
+      ${m.type==="video"?`<video src="${mediaSrc(m)}" controls preload="metadata"></video>`:`<img src="${mediaSrc(m)}" alt="${esc(m.caption||"รูปแม่ไก่")}" loading="lazy">`}
       <button class="del" title="ลบไฟล์นี้" aria-label="ลบไฟล์นี้" onclick="deleteMedia('${b.id}','${m.id}')">✕</button>
       <div class="meta">${m.caption?esc(m.caption)+" · ":""}${esc(m.addedBy||"ไม่ระบุผู้เพิ่ม")}<br>${fmtTH(toISO(new Date(m.addedAt)))}</div>
     </div>`).join(""):`<div class="media-empty">ยังไม่มีรูปภาพหรือวิดีโอ</div>`;
@@ -2376,9 +2477,11 @@ function renderMediaGallery(){
 window.deleteMedia=function(bid,mid){
   const b=bookings.find(x=>x.id===bid);if(!b)return;
   if(!confirm("ลบไฟล์นี้ใช่หรือไม่? กู้คืนไม่ได้"))return;
+  const gone=(b.media||[]).find(m=>m.id===mid);
   b.media=(b.media||[]).filter(m=>m.id!==mid);
   save(KEY_B,bookings);renderMediaGallery();renderAll();
   toast("ลบไฟล์แล้ว");
+  if(gone&&gone.path)cloudDeleteMedia(gone);
 };
 document.getElementById("btnUploadMedia").addEventListener("click",async()=>{
   const file=document.getElementById("mediaFile").files[0];
@@ -2386,27 +2489,33 @@ document.getElementById("btnUploadMedia").addEventListener("click",async()=>{
   const isVideo=file.type.startsWith("video/");
   const isImage=file.type.startsWith("image/");
   if(!isVideo&&!isImage){showMsg("mediaMsg","err","ไฟล์ไม่ถูกต้อง",["รองรับเฉพาะไฟล์รูปภาพหรือวิดีโอเท่านั้น"]);return}
+  const onCloud=cloudReady();
+  const maxVideo=onCloud?MAX_VIDEO_CLOUD:MAX_VIDEO_LOCAL;
   if(isImage&&file.size>MAX_IMAGE_BYTES){showMsg("mediaMsg","err","ไฟล์ใหญ่เกินไป",[`รูปภาพต้องไม่เกิน ${Math.round(MAX_IMAGE_BYTES/1024/1024)}MB`]);return}
-  if(isVideo&&file.size>MAX_VIDEO_BYTES){showMsg("mediaMsg","err","ไฟล์ใหญ่เกินไป",[`วิดีโอต้องไม่เกิน ${Math.round(MAX_VIDEO_BYTES/1024/1024)}MB`]);return}
+  if(isVideo&&file.size>maxVideo){showMsg("mediaMsg","err","ไฟล์ใหญ่เกินไป",[`วิดีโอต้องไม่เกิน ${Math.round(maxVideo/1024/1024)}MB`]);return}
   const btn=document.getElementById("btnUploadMedia");
   btn.disabled=true;btn.textContent="กำลังอัปโหลด...";
   try{
-    const dataUrl=isImage?await resizeImage(file):await readAsDataURL(file);
     const id=document.getElementById("mdBk").value;
     const b=bookings.find(x=>x.id===id);
     if(!b)throw new Error("ไม่พบคิวนี้แล้ว");
     b.media=b.media||[];
-    b.media.push({
-      id:uid(),type:isVideo?"video":"image",dataUrl,
-      caption:document.getElementById("mediaCaption").value.trim(),
-      addedBy:currentStaff?currentStaff.name:"เจ้าของฟาร์ม",
-      addedAt:Date.now(),
-    });
-    const okSave=save(KEY_B,bookings);
-    if(!okSave){
-      b.media.pop();
-      showMsg("mediaMsg","err","พื้นที่จัดเก็บเต็ม",["เบราว์เซอร์นี้เก็บไฟล์เพิ่มไม่ได้แล้ว กรุณาลบไฟล์เก่าบางส่วน หรือใช้ไฟล์ขนาดเล็กลง"]);
-      return;
+    const caption=document.getElementById("mediaCaption").value.trim();
+    const addedBy=currentStaff?currentStaff.name:(cloudRole==="staff"?"พนักงาน":"เจ้าของฟาร์ม");
+    if(onCloud){
+      const blob=isImage?await resizeImageBlob(file):file;
+      const item=await cloudUploadMedia(id,blob,isImage?"image/jpeg":file.type,isImage?"jpg":extOf(file),isVideo?"video":"image",caption,addedBy);
+      b.media.push(item);
+      save(KEY_B,bookings);
+    }else{
+      const dataUrl=isImage?await resizeImage(file):await readAsDataURL(file);
+      b.media.push({id:uid(),type:isVideo?"video":"image",dataUrl,caption,addedBy,addedAt:Date.now()});
+      const okSave=save(KEY_B,bookings);
+      if(!okSave){
+        b.media.pop();
+        showMsg("mediaMsg","err","พื้นที่จัดเก็บเต็ม",["เบราว์เซอร์นี้เก็บไฟล์เพิ่มไม่ได้แล้ว กรุณาลบไฟล์เก่าบางส่วน หรือใช้ไฟล์ขนาดเล็กลง"]);
+        return;
+      }
     }
     document.getElementById("mediaFile").value="";
     document.getElementById("mediaCaption").value="";
