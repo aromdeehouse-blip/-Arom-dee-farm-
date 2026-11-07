@@ -261,6 +261,7 @@
   /* หน้าด่านก่อนล็อกอิน: ซ่อนข้อมูลฟาร์มทั้งหมด เหลือแค่หน้าต่างเข้าสู่ระบบ */
   body[data-mode="gate"] .owner-only,body[data-mode="gate"] .staff-only,body[data-mode="gate"] .customer-only,body[data-mode="gate"] #cloudBadge,body[data-mode="gate"] footer{display:none!important}
   #authModal.gate #btnAuthClose{display:none}
+  #customerLookupModal.gate [data-close]{display:none}
   .pay-box{display:flex;gap:14px;align-items:center;background:var(--paper-2);border:1px dashed var(--line-2);border-radius:10px;padding:12px 14px;margin-top:10px}
   .pay-box img{width:74px;height:74px;border-radius:8px;object-fit:contain;background:#fff;flex:0 0 auto}
   .pay-box .pb-k{font-size:11.5px;color:var(--ink-soft);font-weight:600}
@@ -1068,12 +1069,7 @@ document.getElementById("btnAuthSignup").addEventListener("click",async()=>{
 });
 
 /* -------- ลูกค้าเช็คสถานะคิวด้วยชื่อ+เบอร์โทร (ไม่ต้องล็อกอิน) -------- */
-document.getElementById("btnCustomerEntry").addEventListener("click",()=>{
-  document.getElementById("cuName").value="";
-  document.getElementById("cuPhone").value="";
-  showMsg("customerLookupMsg","err","",[]);
-  openModal("customerLookupModal");
-});
+document.getElementById("btnCustomerEntry").addEventListener("click",()=>{openCustomerLookup();});
 document.getElementById("btnCustomerLookup").addEventListener("click",async()=>{
   if(!sb){showMsg("customerLookupMsg","err","",["ยังไม่ได้ตั้งค่าการเชื่อมต่อคลาวด์"]);return;}
   const name=document.getElementById("cuName").value.trim();
@@ -1113,6 +1109,7 @@ document.getElementById("btnCustomerLookup").addEventListener("click",async()=>{
 document.getElementById("btnCustomerExit").addEventListener("click",()=>{
   customerBookings=[];
   applyBrand();
+  if(CUSTOMER_ONLY){enterCustomerGate();return;}
   if(sb&&!cloudSession&&!offlineChosen()){enterGate();return;}
   viewMode="owner";document.body.dataset.mode=cloudRole==="staff"?"staff":"owner";
   openModal("authModal");
@@ -1535,6 +1532,19 @@ function fillSireSelect(sel){
 
 /* ================= Modals ================= */
 function openModal(id){document.getElementById(id).classList.add("open")}
+/* ลิงก์เฉพาะลูกค้า: ?customer=1 (หน้า /customer ส่งต่อมาที่นี่) ไม่มีปุ่มเข้าสู่ระบบ/ออฟไลน์ ไม่โหลด session เจ้าของ */
+const CUSTOMER_ONLY=/[?&]customer=1/.test(location.search);
+function openCustomerLookup(){
+  document.getElementById("cuName").value="";
+  document.getElementById("cuPhone").value="";
+  showMsg("customerLookupMsg","err","",[]);
+  openModal("customerLookupModal");
+}
+function enterCustomerGate(){
+  viewMode="owner";document.body.dataset.mode="gate";
+  document.getElementById("customerLookupModal").classList.add("gate");
+  openCustomerLookup();
+}
 function offlineChosen(){try{return !!localStorage.getItem("adf_cloud_skip_v1")}catch(e){return false}}
 function gateActive(){return document.getElementById("authModal").classList.contains("gate")}
 function enterGate(){
@@ -1544,6 +1554,7 @@ function enterGate(){
 }
 function leaveGate(){
   document.getElementById("authModal").classList.remove("gate");
+  document.getElementById("customerLookupModal").classList.remove("gate");
   if(document.body.dataset.mode==="gate")document.body.dataset.mode="owner";
 }
 /* ออกจากระบบ: ล้างข้อมูลที่แคชไว้ในเครื่องนี้ (ข้อมูลจริงยังอยู่บนคลาวด์) แล้วกลับสู่หน้าด่าน */
@@ -1560,7 +1571,7 @@ async function signOutAndReset(){
   closeModals();
   enterGate();
 }
-function closeModals(){document.querySelectorAll(".overlay").forEach(o=>{if(o.id==="authModal"&&o.classList.contains("gate"))return;o.classList.remove("open")})}
+function closeModals(){document.querySelectorAll(".overlay").forEach(o=>{if(o.classList.contains("gate"))return;o.classList.remove("open")})}
 document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",closeModals));
 document.querySelectorAll(".overlay").forEach(o=>o.addEventListener("mousedown",e=>{if(e.target===o)closeModals()}));
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModals()});
@@ -2565,11 +2576,13 @@ document.getElementById("deliveredSearch").addEventListener("input",renderDelive
 /* ================= Render ================= */
 function renderAll(){renderStats();renderToday();renderBookings();renderDelivered();renderSires();renderStaffView();renderBackupBanner();}
 applyBrand();
-document.body.dataset.mode=(sb&&!offlineChosen())?"gate":"owner";
+document.body.dataset.mode=(CUSTOMER_ONLY||(sb&&!offlineChosen()))?"gate":"owner";
 renderAll();
 
 /* ================= Cloud: ตรวจสอบ session ตอนเปิดแอป ================= */
+if(CUSTOMER_ONLY){document.title="ตรวจสอบสถานะคิว";enterCustomerGate();}
 (async function initCloud(){
+  if(CUSTOMER_ONLY)return;
   if(!sb){setCloudBadge("hide");return;}
   setCloudBadge("off");
   try{
