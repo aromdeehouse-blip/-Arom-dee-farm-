@@ -258,6 +258,9 @@
   body[data-mode="staff"] .owner-only{display:none}
   body:not([data-mode="customer"]) .customer-only{display:none}
   body[data-mode="customer"] .owner-only{display:none}
+  /* หน้าด่านก่อนล็อกอิน: ซ่อนข้อมูลฟาร์มทั้งหมด เหลือแค่หน้าต่างเข้าสู่ระบบ */
+  body[data-mode="gate"] .owner-only,body[data-mode="gate"] .staff-only,body[data-mode="gate"] .customer-only,body[data-mode="gate"] #cloudBadge,body[data-mode="gate"] footer{display:none!important}
+  #authModal.gate #btnAuthClose{display:none}
   .pay-box{display:flex;gap:14px;align-items:center;background:var(--paper-2);border:1px dashed var(--line-2);border-radius:10px;padding:12px 14px;margin-top:10px}
   .pay-box img{width:74px;height:74px;border-radius:8px;object-fit:contain;background:#fff;flex:0 0 auto}
   .pay-box .pb-k{font-size:11.5px;color:var(--ink-soft);font-weight:600}
@@ -784,7 +787,8 @@ const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}cat
 let sires=load(KEY_S,[]);
 let bookings=load(KEY_B,[]);
 const DEFAULT_THEME={primary:"#1E4632",accent:"#C6942B"};
-let settings=Object.assign({name:"ฟาร์มของฉัน",phone:"",addr:"",terms:DEFAULT_TERMS,logo:null,themePrimary:DEFAULT_THEME.primary,themeAccent:DEFAULT_THEME.accent,payQr:null,payBankName:"",payBankAccount:"",payAccountHolder:""},load(KEY_SET,{}));
+const defaultSettings=()=>({name:"ฟาร์มของฉัน",phone:"",addr:"",terms:DEFAULT_TERMS,logo:null,themePrimary:DEFAULT_THEME.primary,themeAccent:DEFAULT_THEME.accent,payQr:null,payBankName:"",payBankAccount:"",payAccountHolder:""});
+let settings=Object.assign(defaultSettings(),load(KEY_SET,{}));
 let currentStaff=load(KEY_STAFF,null);
 let viewMode="owner";
 let customerBookings=[];
@@ -819,13 +823,8 @@ function setCloudBadge(state){ // state: 'on' | 'off' | 'hide'
   el.onclick=state==="on"?()=>openCloudMenu():()=>openModal("authModal");
 }
 function openCloudMenu(){
-  if(confirm("ออกจากระบบฟาร์มนี้ (กลับไปใช้แบบออฟไลน์ในเครื่องนี้)?")){
-    sb.auth.signOut();
-    cloudSession=null;farmId=null;cloudRole=null;
-    resetStaffModeButton();
-    viewMode="owner";document.body.dataset.mode="owner";
-    setCloudBadge("off");
-    toast("ออกจากระบบฟาร์มแล้ว ทำงานแบบออฟไลน์ในเครื่องนี้");
+  if(confirm("ออกจากระบบฟาร์มนี้?\n\n(ข้อมูลที่แคชไว้ในเครื่องนี้จะถูกล้างเพื่อความเป็นส่วนตัว ข้อมูลจริงยังอยู่บนคลาวด์ ล็อกอินใหม่แล้วจะกลับมาครบ)")){
+    signOutAndReset();
   }
 }
 
@@ -999,6 +998,7 @@ async function resolveRole(userId){
 }
 async function afterLogin(session){
   cloudSession=session;
+  leaveGate();
   const resolved=await resolveRole(session.user.id);
   closeModals();
   if(resolved.role==="owner"){
@@ -1019,7 +1019,7 @@ async function afterLogin(session){
     await cloudFetchAllForStaff();
   }else{
     const farmInfo=await ensureFarmForUser(session.user);
-    if(!farmInfo){toast("เชื่อมต่อฐานข้อมูลไม่สำเร็จ ลองใหม่อีกครั้ง");return;}
+    if(!farmInfo){toast("เชื่อมต่อฐานข้อมูลไม่สำเร็จ ลองใหม่อีกครั้ง");enterGate();return;}
     cloudRole="owner";farmId=farmInfo.id;
     setCloudBadge("on");
     viewMode="owner";document.body.dataset.mode="owner";
@@ -1038,8 +1038,11 @@ async function afterLogin(session){
   renderAll();
   toast("เชื่อมต่อฐานข้อมูลคลาวด์แล้ว ✓");
 }
-document.getElementById("btnAuthSkip").addEventListener("click",()=>{closeModals();});
-document.getElementById("btnAuthClose").addEventListener("click",()=>{closeModals();});
+document.getElementById("btnAuthSkip").addEventListener("click",()=>{
+  try{localStorage.setItem("adf_cloud_skip_v1","1");}catch(e){}
+  leaveGate();closeModals();renderAll();
+});
+document.getElementById("btnAuthClose").addEventListener("click",()=>{if(gateActive())return;closeModals();});
 document.getElementById("btnAuthSignin").addEventListener("click",async()=>{
   if(!sb){showMsg("authMsg","err","",["ยังไม่ได้ตั้งค่าการเชื่อมต่อคลาวด์"]);return;}
   const email=document.getElementById("auEmail").value.trim();
@@ -1100,7 +1103,7 @@ document.getElementById("btnCustomerLookup").addEventListener("click",async()=>{
       });
     }
   }catch(e){console.warn("ดึงรูป/วิดีโอไม่สำเร็จ",e)}
-  closeModals();
+  leaveGate();closeModals();
   viewMode="customer";document.body.dataset.mode="customer";
   document.getElementById("brandName").textContent=customerBookings[0].farmName||settings.name;
   document.getElementById("logo").innerHTML=customerBookings[0].farmLogo?`<img src="${customerBookings[0].farmLogo}" alt="โลโก้ฟาร์ม">`:"🐓";
@@ -1109,8 +1112,9 @@ document.getElementById("btnCustomerLookup").addEventListener("click",async()=>{
 });
 document.getElementById("btnCustomerExit").addEventListener("click",()=>{
   customerBookings=[];
-  viewMode="owner";document.body.dataset.mode=cloudRole==="staff"?"staff":"owner";
   applyBrand();
+  if(sb&&!cloudSession&&!offlineChosen()){enterGate();return;}
+  viewMode="owner";document.body.dataset.mode=cloudRole==="staff"?"staff":"owner";
   openModal("authModal");
 });
 function mediaBlockHTML(b){
@@ -1531,7 +1535,32 @@ function fillSireSelect(sel){
 
 /* ================= Modals ================= */
 function openModal(id){document.getElementById(id).classList.add("open")}
-function closeModals(){document.querySelectorAll(".overlay").forEach(o=>o.classList.remove("open"))}
+function offlineChosen(){try{return !!localStorage.getItem("adf_cloud_skip_v1")}catch(e){return false}}
+function gateActive(){return document.getElementById("authModal").classList.contains("gate")}
+function enterGate(){
+  viewMode="owner";document.body.dataset.mode="gate";
+  document.getElementById("authModal").classList.add("gate");
+  openModal("authModal");
+}
+function leaveGate(){
+  document.getElementById("authModal").classList.remove("gate");
+  if(document.body.dataset.mode==="gate")document.body.dataset.mode="owner";
+}
+/* ออกจากระบบ: ล้างข้อมูลที่แคชไว้ในเครื่องนี้ (ข้อมูลจริงยังอยู่บนคลาวด์) แล้วกลับสู่หน้าด่าน */
+async function signOutAndReset(){
+  try{if(sb)await sb.auth.signOut()}catch(e){}
+  try{
+    [KEY_B,KEY_S,KEY_SET,KEY_STAFF,"adf_cloud_skip_v1","adf_lastbackup_v1"].forEach(k=>localStorage.removeItem(k));
+  }catch(e){}
+  sires=[];bookings=[];settings=defaultSettings();currentStaff=null;customerBookings=[];
+  cloudSession=null;farmId=null;cloudRole=null;
+  resetStaffModeButton();
+  applyBrand();renderAll();
+  setCloudBadge("off");
+  closeModals();
+  enterGate();
+}
+function closeModals(){document.querySelectorAll(".overlay").forEach(o=>{if(o.id==="authModal"&&o.classList.contains("gate"))return;o.classList.remove("open")})}
 document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",closeModals));
 document.querySelectorAll(".overlay").forEach(o=>o.addEventListener("mousedown",e=>{if(e.target===o)closeModals()}));
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModals()});
@@ -2176,14 +2205,7 @@ document.getElementById("btnStaffLogin").addEventListener("click",()=>{
 });
 document.getElementById("btnStaffLogout").addEventListener("click",async()=>{
   if(cloudRole==="staff"){
-    if(sb)await sb.auth.signOut();
-    cloudSession=null;farmId=null;cloudRole=null;
-    currentStaff=null;save(KEY_STAFF,null);
-    resetStaffModeButton();
-    viewMode="owner";document.body.dataset.mode="owner";
-    setCloudBadge("off");
-    toast("ออกจากโหมดพนักงานแล้ว");
-    openModal("authModal");
+    await signOutAndReset();
     return;
   }
   viewMode="owner";
@@ -2543,7 +2565,7 @@ document.getElementById("deliveredSearch").addEventListener("input",renderDelive
 /* ================= Render ================= */
 function renderAll(){renderStats();renderToday();renderBookings();renderDelivered();renderSires();renderStaffView();renderBackupBanner();}
 applyBrand();
-document.body.dataset.mode="owner";
+document.body.dataset.mode=(sb&&!offlineChosen())?"gate":"owner";
 renderAll();
 
 /* ================= Cloud: ตรวจสอบ session ตอนเปิดแอป ================= */
@@ -2554,12 +2576,14 @@ renderAll();
     const {data:{session}}=await sb.auth.getSession();
     if(session){
       await afterLogin(session);
-    }else if(!localStorage.getItem("adf_cloud_skip_v1")){
-      openModal("authModal");
+    }else if(!offlineChosen()){
+      enterGate();
     }
-  }catch(err){console.warn("ตรวจสอบสถานะล็อกอินไม่สำเร็จ",err);}
+  }catch(err){
+    console.warn("ตรวจสอบสถานะล็อกอินไม่สำเร็จ",err);
+    if(document.body.dataset.mode==="gate")enterGate();
+  }
 })();
-document.getElementById("btnAuthSkip").addEventListener("click",()=>{localStorage.setItem("adf_cloud_skip_v1","1");});
 </script>
 </body>
 </html>
